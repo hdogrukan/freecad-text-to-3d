@@ -308,7 +308,7 @@
     color: var(--txt);
   }
 
-  /* Mesaj balonları */
+  /* Message bubbles */
   .msg-row {
     display: flex;
     gap: 12px;
@@ -359,7 +359,7 @@
     border-top-left-radius: 3px;
   }
 
-  /* Kod bloğu */
+  /* Code block */
   .code-block {
     margin-top: 12px;
     border: 1px solid var(--border);
@@ -406,7 +406,7 @@
     overflow-y: auto;
   }
 
-  /* FreeCAD sonuç pill */
+  /* FreeCAD result pill */
   .fc-result {
     display: inline-flex;
     align-items: center;
@@ -824,22 +824,22 @@
     </button>
     <div class="status-pill" id="freecad-status" onclick="launchFreeCAD()">
       <span class="status-dot {% if freecad_ok %}ok{% else %}err{% endif %}" id="status-dot"></span>
-      <span id="status-text">{% if freecad_ok %}FreeCAD Hazır{% else %}FreeCAD Bulunamadı{% endif %}</span>
+      <span id="status-text">{% if freecad_ok %}FreeCAD Ready{% else %}FreeCAD Not Found{% endif %}</span>
     </div>
   </header>
 
   <!-- ── Sidebar ──────────────────────────────────────── -->
   <aside class="sidebar">
-    <div class="sidebar-header">Oturumlar</div>
+    <div class="sidebar-header">Sessions</div>
     <button class="new-chat-btn" onclick="newChat()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
         <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
       </svg>
-      Yeni Chat
+      New Chat
     </button>
-    <button class="clear-history-btn" onclick="clearAllChats()">Geçmişi Temizle</button>
+    <button class="clear-history-btn" onclick="clearAllChats()">Clear History</button>
     <div class="history-list" id="history-list">
-      <div class="history-empty">Kayıtlı chat yok</div>
+      <div class="history-empty">No saved chats</div>
     </div>
     <div class="sidebar-footer">
       Toplam mesaj: <span class="msg-count-badge" id="msg-count">0</span>
@@ -851,20 +851,20 @@
     <div class="messages" id="messages">
       <div class="welcome" id="welcome">
         <span class="welcome-icon">🧱</span>
-        <h2>3D Model Oluşturmaya Hazır</h2>
-        <p>FreeCAD Python API ile tam uyumlu. Türkçe olarak bir 3D model tarif et, anında FreeCAD'de oluşturayım.</p>
+        <h2>Ready to Create a 3D Model</h2>
+        <p>Fully compatible with the FreeCAD Python API. Describe a 3D model and I will create it in FreeCAD.</p>
         <div class="examples">
-          <button class="example-chip" onclick="fillExample(this)">10×10×5 cm boyutlarında üstü açık dikdörtgen kutu</button>
-          <button class="example-chip" onclick="fillExample(this)">5 cm çaplı, 10 cm yüksekliğinde, 2 mm et kalınlıklı içi boş silindir</button>
-          <button class="example-chip" onclick="fillExample(this)">Üstte 2 cm, altta 4 cm çaplı, 8 cm yüksekliğinde koni</button>
-          <button class="example-chip" onclick="fillExample(this)">20×20 mm taban, 1mm fileto ile köşeleri yuvarlatılmış küp</button>
+          <button class="example-chip" onclick="fillExample(this)">An open rectangular box sized 10×10×5 cm</button>
+          <button class="example-chip" onclick="fillExample(this)">A hollow cylinder with 5 cm diameter, 10 cm height, and 2 mm wall thickness</button>
+          <button class="example-chip" onclick="fillExample(this)">A cone with 2 cm top diameter, 4 cm bottom diameter, and 8 cm height</button>
+          <button class="example-chip" onclick="fillExample(this)">A cube with a 20×20 mm base and rounded corners using a 1 mm fillet</button>
         </div>
       </div>
     </div>
 
     <div class="input-bar">
       <div class="input-row">
-        <textarea id="user-input" rows="1" placeholder="Bir 3D model tarif et… (Shift+Enter yeni satır)"></textarea>
+        <textarea id="user-input" rows="1" placeholder="Describe a 3D model… (Shift+Enter for a new line)"></textarea>
         <button class="send-btn" id="send-btn" onclick="sendMessage()">
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
             <line x1="22" y1="2" x2="11" y2="13"/>
@@ -872,17 +872,17 @@
           </svg>
         </button>
       </div>
-      <div class="input-hint">Enter → Gönder &nbsp;·&nbsp; Shift+Enter → Yeni satır</div>
+      <div class="input-hint">Enter → Send &nbsp;·&nbsp; Shift+Enter → New line</div>
     </div>
   </main>
 
   <!-- ── Console ──────────────────────────────────────── -->
   <aside class="console-panel" id="console-panel" aria-hidden="true">
     <div class="console-header">
-      <span class="console-title">⚙ FreeCAD Konsol</span>
+      <span class="console-title">⚙ FreeCAD Console</span>
       <div class="console-header-actions">
-        <button class="console-clear-btn" onclick="clearLog()">Temizle</button>
-        <button class="console-close-btn" onclick="closeConsole()" aria-label="Konsolu kapat">
+        <button class="console-clear-btn" onclick="clearLog()">Clear</button>
+        <button class="console-close-btn" onclick="closeConsole()" aria-label="Close console">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -892,9 +892,9 @@
     </div>
     <div id="console-log"></div>
     <div class="console-footer">
-      <button class="console-btn primary" onclick="launchFreeCAD()">FreeCAD Aç</button>
-      <button class="console-btn" onclick="checkStatus()">Durum</button>
-      <button class="console-btn" onclick="loadServerLogs()">Loglar</button>
+      <button class="console-btn primary" onclick="launchFreeCAD()">Open FreeCAD</button>
+      <button class="console-btn" onclick="checkStatus()">Status</button>
+      <button class="console-btn" onclick="loadServerLogs()">Logs</button>
     </div>
   </aside>
 
@@ -1037,11 +1037,11 @@ async function sendMessage() {
   textarea.value = "";
   textarea.style.height = "auto";
 
-  // Kullanıcı balonunu ekle
+  // Add the user bubble.
   appendUserMsg(text);
   hideWelcome();
 
-  // Thinking göster
+  // Show the thinking indicator.
   const thinkId = showThinking();
   setInputEnabled(false);
 
@@ -1062,7 +1062,7 @@ async function sendMessage() {
 
     removeThinking(thinkId);
 
-    // AI cevabını ekle
+    // Add the AI response.
     appendAIMsg(data.description, data.python_code, data.freecad_result);
 
     // FreeCAD sonucu
@@ -1077,7 +1077,7 @@ async function sendMessage() {
       }
     }
 
-    // Sayaçları güncelle
+    // Update counters.
     msgCount = data.history_count;
     currentChatId = data.chat_id;
     localStorage.setItem("freecadTextTo3dChatId", currentChatId);

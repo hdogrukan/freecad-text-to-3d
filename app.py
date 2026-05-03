@@ -1,9 +1,9 @@
 """
 Flask Backend
-- /          → Ana sayfa (chat UI)
-- /api/chat  → OpenAI'ye mesaj gönder, FreeCAD kodu üret ve çalıştır
-- /api/new   → Chat geçmişini sıfırla
-- /api/status → FreeCAD bağlantı durumu
+- /            -> Main chat UI
+- /api/chat    -> Send message to OpenAI, generate FreeCAD code, and run it
+- /api/new     -> Create a new chat
+- /api/status  -> FreeCAD connection/status details
 """
 
 import os
@@ -20,7 +20,7 @@ from app_logger import EventLogger
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Session sunucu taraflı (in-memory) sakla
+# Store Flask sessions server-side.
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["SESSION_FILE_DIR"] = "/tmp/freecad_sessions"
 app.config["SESSION_PERMANENT"] = False
@@ -33,10 +33,10 @@ fc_bridge  = FreeCADBridge(config)
 chat_store = ChatStore(config.CHAT_HISTORY_PATH)
 event_log  = EventLogger(config.EVENT_LOG_PATH)
 
-# FreeCAD kurulu mu kontrol et
+# Check whether FreeCAD is installed.
 FREECAD_AVAILABLE = fc_bridge.check_freecad_installed()
 
-# ─── API ──────────────────────────────────────────────────────────────────────
+# API -------------------------------------------------------------------------
 
 @app.route("/")
 def index():
@@ -57,49 +57,45 @@ def api_chat():
         "info",
         "api",
         "chat_request",
-        "Chat isteği alındı",
+        "Chat request received",
         chat_id=chat_id,
         language=language,
         message_preview=message[:120],
     )
 
     if not message:
-        error = "Message cannot be empty" if language == "en" else "Mesaj boş olamaz"
+        error = "Message cannot be empty"
         event_log.log("warn", "api", "empty_message", error, chat_id=chat_id)
         return jsonify({"error": error}), 400
 
     history = chat_store.to_openai_history(chat_id)
-    event_log.log("info", "chat_store", "history_loaded", "Chat geçmişi yüklendi", chat_id=chat_id, history_items=len(history))
+    event_log.log("info", "chat_store", "history_loaded", "Chat history loaded", chat_id=chat_id, history_items=len(history))
 
-    # 1. OpenAI'dan yanıt al
+    # 1. Get a response from OpenAI.
     try:
         description, python_code = ai_bridge.chat(history, message, language=language)
         event_log.log(
             "success",
             "openai",
             "completion",
-            "OpenAI yanıtı alındı",
+            "OpenAI response received",
             chat_id=chat_id,
             code_lines=len((python_code or "").splitlines()),
             description_preview=description[:180],
         )
     except Exception as e:
-        prefix = "OpenAI error" if language == "en" else "OpenAI hatası"
+        prefix = "OpenAI error"
         event_log.log("error", "openai", "completion_failed", str(e), chat_id=chat_id)
         return jsonify({"error": f"{prefix}: {str(e)}"}), 500
 
     if not python_code:
         python_code = chat_store.latest_python_code(chat_id)
         if python_code:
-            description = (
-                "No new code block was returned, so the latest generated model code was applied again."
-                if language == "en"
-                else "Yeni kod bloğu gelmediği için son üretilen model kodu tekrar uygulandı."
-            )
-            event_log.log("warn", "api", "fallback_latest_code", "Yeni kod gelmedi, son kod tekrar uygulanacak", chat_id=chat_id)
+            description = "No new code block was returned, so the latest generated model code was applied again."
+            event_log.log("warn", "api", "fallback_latest_code", "No new code was returned; applying the latest code again", chat_id=chat_id)
 
-    # 2. FreeCAD kodu varsa çalıştır
-    fc_result = {"success": False, "message": "Kod bulunamadı"}
+    # 2. Run FreeCAD code when available.
+    fc_result = {"success": False, "message": "No code found"}
     if python_code:
         success, msg = fc_bridge.run_code(python_code)
         fc_result = {"success": success, "message": msg}
@@ -111,9 +107,9 @@ def api_chat():
         chat_id=chat_id,
     )
 
-    # 3. Chat geçmişini diske kaydet
+    # 3. Persist chat history to disk.
     chat = chat_store.add_turn(chat_id, message, description, python_code, fc_result)
-    event_log.log("info", "chat_store", "turn_saved", "Chat turn diske kaydedildi", chat_id=chat["id"], turn_count=len(chat.get("turns", [])))
+    event_log.log("info", "chat_store", "turn_saved", "Chat turn saved to disk", chat_id=chat["id"], turn_count=len(chat.get("turns", [])))
 
     return jsonify({
         "chat_id":       chat["id"],
@@ -140,7 +136,7 @@ def api_chats():
 def api_chat_detail(chat_id):
     chat = chat_store.get_chat(chat_id)
     if not chat:
-        return jsonify({"error": "Chat bulunamadı"}), 404
+        return jsonify({"error": "Chat not found"}), 404
     return jsonify({"chat": chat})
 
 
@@ -173,12 +169,12 @@ def api_logs():
 
 @app.route("/api/launch", methods=["POST"])
 def api_launch():
-    """FreeCAD GUI'yi başlat"""
+    """Launch the FreeCAD GUI."""
     success, msg = fc_bridge.launch_freecad()
     return jsonify({"success": success, "message": msg})
 
 
-# ─── Başlat ───────────────────────────────────────────────────────────────────
+# Startup ---------------------------------------------------------------------
 
 if __name__ == "__main__":
     import webbrowser, time
@@ -189,15 +185,15 @@ if __name__ == "__main__":
     print("═" * 55)
     
     if not FREECAD_AVAILABLE:
-        print("  ⚠  FreeCAD bulunamadı: /Applications/FreeCAD.app")
-        print("  → https://www.freecad.org adresinden indirin")
+        print("  !  FreeCAD not found: /Applications/FreeCAD.app")
+        print("  -> Download it from https://www.freecad.org")
     else:
-        print("  ✓  FreeCAD tespit edildi")
+        print("  ✓  FreeCAD detected")
     
     print("  OpenAI Model:", config.OPENAI_MODEL)
     print("═" * 55 + "\n")
 
-    # Tarayıcıyı 1 saniye sonra aç
+    # Open the browser after a short delay.
     def open_browser():
         time.sleep(1)
         webbrowser.open("http://127.0.0.1:5000")

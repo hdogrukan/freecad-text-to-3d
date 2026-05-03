@@ -1,19 +1,19 @@
 import os
 from dotenv import load_dotenv
 
-# Proje kökündeki .env dosyasını yükle
+# Load the .env file from the project root.
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 class Config:
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
     OPENAI_MODEL   = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
     
-    # FreeCAD macOS yolu
+    # FreeCAD macOS paths
     FREECAD_PATH   = "/Applications/FreeCAD.app/Contents/Resources/bin/FreeCADCmd"
     FREECAD_PYTHON = "/Applications/FreeCAD.app/Contents/Resources/bin/python"
     FREECAD_GUI    = "/Applications/FreeCAD.app/Contents/MacOS/FreeCAD"
     
-    # Socket ayarları (Flask ↔ FreeCAD macro iletişimi)
+    # Socket settings (Flask <-> FreeCAD macro communication)
     SOCKET_HOST = "127.0.0.1"
     SOCKET_PORT = 27182
     
@@ -22,7 +22,7 @@ class Config:
     FLASK_PORT  = 5000
     DEBUG       = False
     
-    # FreeCAD çıktı dosyası (macro bu dizine yazar)
+    # FreeCAD output directory
     OUTPUT_DIR  = os.path.expanduser(
         os.environ.get("OUTPUT_DIR", "~/freecad_text_to_3d_output")
     )

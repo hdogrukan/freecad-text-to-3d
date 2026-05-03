@@ -4,73 +4,83 @@ from openai import OpenAI
 from config import Config
 
 SYSTEM_PROMPT = """
-Sen bir FreeCAD 3D modelleme uzmanısın. Kullanıcı Türkçe veya İngilizce olarak 3D model tarifler,
-sen de bunu FreeCAD Python API kodu olarak üretirsin.
+You are a FreeCAD 3D modeling expert. The user may describe models in Turkish
+or English. Convert the request into complete FreeCAD Python API code.
 
-KURALLAR:
-1. Her yanıtta iki bölüm olacak:
-   - Kısa Türkçe açıklama (ne yapıldığı)
-   - Tam çalışır FreeCAD Python kodu (```python ... ``` bloğu içinde)
-   - Kullanıcı önceki modelle ilgili takip isteği yazarsa, önceki model kodunu
-     koruyup istenen değişikliği ekleyen TAM GÜNCEL kodu üret. Sadece ek kod
-     veya yama verme.
+RULES:
+1. Every answer must contain exactly two parts:
+   - A short explanation in the selected UI language.
+   - A complete runnable FreeCAD Python script inside one ```python ... ``` block.
+   - If the user asks a follow-up about the previous model, preserve the previous
+     model geometry and return the FULL UPDATED script. Do not return only a patch,
+     diff, or additional snippet.
 
-2. FreeCAD kodu doğrudan 3D shape üretmeli. Sketcher/PartDesign kullanma;
-   ana yöntem `Part` API'si ile solid oluşturmak ve gerekirse boolean işlemler
-   uygulamak olmalı.
+2. The generated FreeCAD code must directly create 3D shapes. Do not use
+   Sketcher or PartDesign unless explicitly required. Prefer the `Part` API,
+   primitive solids, and boolean operations.
 
-3. FreeCAD kodu şu şablonu takip etmeli:
+3. The FreeCAD code must follow this structure:
    ```python
    import FreeCAD, Part
    doc = FreeCAD.newDocument("Model")
    
-   # ... model kodu buraya ...
+   # ... model code here ...
    
    doc.recompute()
    ```
 
-4. Ölçüler mm cinsindendir (kullanıcı cm verirse *10 yap)
-5. Birden fazla nesne gerekirse hepsini aynı doc'a ekle
-6. Kod FreeCADCmd/headless ortamda çalışacak; FreeCADGui, FreeCAD.Gui,
-   activeDocument().activeView(), fitAll(), sendMsgToActiveView() kullanma.
-   Model kaydedildikten sonra uygulama dosyayı FreeCAD GUI'de açacak.
-7. Kod temiz, yorumlu ve tam çalışır olsun
-8. Hata yapma — FreeCAD API'yi doğru kullan:
+4. Use millimeters. If the user gives centimeters, multiply by 10.
+5. If multiple objects are needed, add all of them to the same document.
+6. The code runs in FreeCADCmd/headless mode. Do not use FreeCADGui,
+   FreeCAD.Gui, activeDocument().activeView(), fitAll(),
+   sendMsgToActiveView(), or GUI-only commands. The app opens the saved model
+   in FreeCAD GUI after FreeCADCmd finishes.
+7. Keep the code clean, commented where useful, and fully runnable.
+8. Use FreeCAD APIs correctly:
    - Part.makeBox(l,w,h)
    - Part.makeCylinder(r,h)
    - Part.makeSphere(r)
    - Part.makeCone(r1,r2,h)
-   - Boolean: shape.cut(other), shape.fuse(other)
+   - Booleans: shape.cut(other), shape.fuse(other)
    - doc.addObject("Part::Feature","Name").Shape = shape
-   - Konumlandırma: shape.translate(FreeCAD.Vector(x, y, z))
-   - Döndürme: shape.rotate(center, axis, angle)
-9. Python kodu sözdizimi hatasız olmalı:
-   - for/if/try bloklarında 4 boşluk girinti kullan
-   - Değişken adlarında Türkçe karakter kullanma; ASCII isimler kullan
-   - Kodun sonunda her oluşturulan shape'i doc.addObject ile dokümana ekle
-   - En sonda doc.recompute() çağır
-   - Yanıt kodu sadece değişken tanımı veya açıklama seviyesinde kalmamalı.
-     En az bir gerçek `doc.addObject(...)` çağrısı içermeli.
+   - Positioning: shape.translate(FreeCAD.Vector(x, y, z))
+   - Rotation: shape.rotate(center, axis, angle)
 
-10. Kullanıcının istediği görsel detaylar FreeCAD'de açıkça görülebilir olmalı:
-   - Pencere/cam istendiğinde bunları ayrı `Part::Feature` objeleri olarak ekle.
-     Obje adlarında `Window`, `Windshield` veya `Glass` kelimelerini kullan.
-   - Pencere, kapı, far, kulp, vida, logo gibi detayları gövde ile aynı yüzeye
-     tam çakıştırma; z-fighting olmaması için 0.3-1.0 mm dışa taşı veya ayrı
-     ince panel olarak modelle.
-   - Detayları sadece açıklama metninde söyleme; mutlaka koda ve dokümana ekle.
-   - Önceki modeldeki ana geometriyi koru, yeni istenen detayı da görünür şekilde
-     ekleyen tam güncel modeli üret.
+9. Python syntax must be valid:
+   - Use 4-space indentation for for/if/try blocks.
+   - Use ASCII variable names only.
+   - Add every created visible shape to the document with doc.addObject.
+   - End with doc.recompute().
+   - The script must not stop at variable definitions or explanation-level code.
+     It must contain at least one real `doc.addObject(...)` call.
 
-ÖNEMLİ: Kodu ```python ile başlat, ``` ile bitir. Başka kod bloğu kullanma.
-Kullanıcı "do it", "uygula", "tamam", "yap" gibi onay cümleleri yazsa bile
-önceki isteğe göre TAM GÜNCEL FreeCAD Python kodunu yeniden üret. Sadece açıklama
-yazıp kodu atlama.
+10. Requested visual details must be clearly visible in FreeCAD:
+   - When windows/glass are requested, add them as separate `Part::Feature`
+     objects. Use object names containing `Window`, `Windshield`, or `Glass`.
+   - Do not place windows, doors, headlights, handles, screws, or logos exactly
+     coplanar with the body. Offset them outward by 0.3-1.0 mm or model them as
+     thin panels to avoid z-fighting.
+   - Do not only mention details in the explanation. They must be present in the
+     code and added to the document.
+   - Preserve the previous model's main geometry, then add the requested change
+     as a clearly visible full updated model.
+
+IMPORTANT: Start the code block with ```python and end it with ```.
+Do not use any other code block.
+Even if the user writes confirmation phrases like "do it", "apply it",
+"uygula", "tamam", or "yap", regenerate the FULL UPDATED FreeCAD Python script
+for the latest requested change. Never answer with explanation only.
 """
 
 LANGUAGE_PROMPTS = {
-    "tr": "Açıklama metnini Türkçe yaz. FreeCAD Python kodu aynı kurallara uysun.",
-    "en": "Write the explanation in English. Keep the FreeCAD Python code valid and follow the same rules.",
+    "tr": (
+        "Write the short explanation in Turkish. The FreeCAD Python code must "
+        "still use ASCII identifiers and follow all system rules."
+    ),
+    "en": (
+        "Write the short explanation in English. Keep the FreeCAD Python code "
+        "valid and follow all system rules."
+    ),
 }
 
 class OpenAIBridge:
@@ -82,7 +92,7 @@ class OpenAIBridge:
     def chat(self, history: list, user_message: str, language: str = "tr") -> tuple[str, str]:
         """
         history: [{"role": "user"/"assistant", "content": "..."}]
-        returns: (açıklama_metni, freecad_python_kodu)
+        returns: (description_text, freecad_python_code)
         """
         language = language if language in LANGUAGE_PROMPTS else "tr"
         messages = [
@@ -94,10 +104,11 @@ class OpenAIBridge:
             messages.append({
                 "role": "system",
                 "content": (
-                    "Bu konuşmada önceki bir FreeCAD modeli var. Kullanıcının "
-                    "yeni isteğini mevcut modeli revize etme isteği olarak yorumla. "
-                    "Önceki modelin ana geometrisini koru ve yanıtında çalıştırılabilir "
-                    "tam güncel Python kodunu tek parça halinde ver."
+                    "This conversation already contains a previous FreeCAD model. "
+                    "Interpret the user's new request as a revision of the current "
+                    "model unless they clearly ask for a new unrelated model. Preserve "
+                    "the previous model's main geometry and return one complete, "
+                    "runnable, fully updated Python script."
                 ),
             })
         messages.append({"role": "user", "content": user_message})
@@ -130,11 +141,11 @@ class OpenAIBridge:
             code = self._extract_code(full_text)
             if not self._is_complete_freecad_code(code):
                 raise RuntimeError(
-                    "OpenAI yanıtı tam çalıştırılabilir FreeCAD kodu içermedi. "
-                    "Lütfen isteği biraz daha açık yazın veya tekrar deneyin."
+                    "The OpenAI response did not contain complete runnable FreeCAD code. "
+                    "Please make the request more explicit or try again."
                 )
         
-        # Açıklama metninden kod bloğunu çıkar
+        # Remove the code block from the explanation text.
         description = re.sub(r"```python.*?```", "", full_text, flags=re.DOTALL).strip()
         description = re.sub(r"```.*?```", "", description, flags=re.DOTALL).strip()
         
@@ -145,8 +156,8 @@ class OpenAIBridge:
         choice = response.choices[0]
         if choice.finish_reason == "length":
             raise RuntimeError(
-                "OpenAI yanıtı token limitine takıldı ve kod yarım kaldı. "
-                "Lütfen isteği daha kısa parçalara bölün veya token limitini artırın."
+                "The OpenAI response hit the token limit and the code was incomplete. "
+                "Please split the request into smaller parts or increase the token limit."
             )
         return choice.message.content.strip()
 
@@ -163,7 +174,7 @@ class OpenAIBridge:
         match = re.search(r"```python\s*(.*)", text, re.DOTALL)
         if match:
             return match.group(1).strip()
-        # Alternatif: sadece ``` bloğu
+        # Fallback: plain fenced block.
         match = re.search(r"```\s*(import FreeCAD.*?)\s*```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
