@@ -271,6 +271,59 @@ Open the web console and click `Logs`. Also inspect:
 
 Close all FreeCAD windows and restart the Flask app if an old GUI bridge is still running.
 
+## Contributing
+
+Contributions are welcome.
+
+This project is still evolving around FreeCAD automation, model revision workflows, prompt quality, UI responsiveness, logging, and cross-platform support.
+
+Good areas to contribute:
+
+- Improve FreeCAD model generation prompts
+- Make existing-model revision workflows more reliable
+- Improve FreeCAD GUI refresh, centering, and visibility handling
+- Add Windows and Linux FreeCAD path support
+- Improve the responsive web UI
+- Add tests for chat history, code extraction, and FreeCAD execution
+- Improve documentation, installation guides, and example prompts
+- Add screenshots, demo GIFs, or sample generated models
+
+### Development Setup
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5000
+```
+
+### Good First Issues
+
+Good first contributions include:
+
+- Add more example prompts
+- Improve README wording
+- Add screenshots or demo GIFs
+- Improve error messages
+- Add small UI polish
+- Add tests for chat history
+
+### Pull Request Checklist
+
+Before opening a PR, please check:
+
+- The app starts with `python app.py`
+- No API keys, `.env` files, logs, or generated `.FCStd` files are committed
+- README or docs are updated if behavior changes
+- FreeCAD-related changes are tested with FreeCAD when possible
+- The UI still works on desktop and mobile widths
+
 ## Before Publishing Publicly
 
 Check these before pushing to GitHub:
@@ -560,6 +613,59 @@ Web konsolda `Loglar` butonuna basın. Ayrıca şunları inceleyin:
 ```
 
 Eski bir GUI bridge hâlâ çalışıyorsa tüm FreeCAD pencerelerini kapatıp Flask uygulamasını yeniden başlatın.
+
+## Katkı Verme
+
+Katkılara açıktır.
+
+Bu proje özellikle FreeCAD otomasyonu, mevcut modeli güncelleme akışı, prompt kalitesi, responsive arayüz, log sistemi ve farklı işletim sistemi desteği tarafında geliştirilmeye uygundur.
+
+Katkı verilebilecek alanlar:
+
+- FreeCAD model üretim promptlarını iyileştirme
+- Mevcut çizim üzerinde revizyon akışını daha güvenilir hale getirme
+- FreeCAD GUI yenileme, ortalama ve görünürlük davranışını iyileştirme
+- Windows ve Linux FreeCAD path desteği ekleme
+- Responsive web arayüzünü geliştirme
+- Chat history, kod ayıklama ve FreeCAD çalıştırma için test ekleme
+- Kurulum dokümantasyonu ve örnek promptları geliştirme
+- Ekran görüntüleri, demo GIF'leri veya örnek üretilmiş modeller ekleme
+
+### Geliştirme Kurulumu
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+Sonra tarayıcıda açın:
+
+```text
+http://127.0.0.1:5000
+```
+
+### İlk Katkı İçin Uygun İşler
+
+İlk katkı için uygun işler:
+
+- Daha fazla örnek prompt ekleme
+- README metnini iyileştirme
+- Ekran görüntüsü veya demo GIF ekleme
+- Hata mesajlarını iyileştirme
+- Küçük UI düzenlemeleri yapma
+- Chat history için test ekleme
+
+### Pull Request Kontrol Listesi
+
+PR açmadan önce kontrol edin:
+
+- Uygulama `python app.py` ile açılıyor
+- API key, `.env`, log veya üretilmiş `.FCStd` dosyaları commit edilmedi
+- Davranış değiştiyse README veya dokümantasyon güncellendi
+- FreeCAD tarafına dokunan değişiklikler mümkünse FreeCAD ile test edildi
+- UI desktop ve mobil genişliklerde çalışıyor
 
 ## Public Yayınlamadan Önce
 
