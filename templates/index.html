@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FreeCAD Text-to-3D</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  :root {
+    --bg:          #0C0E15;
+    --panel:       #11141D;
+    --card:        #171B27;
+    --border:      #222638;
+    --accent:      #4F8EF7;
+    --accent-dk:   #2D5FD4;
+    --green:       #3DD68C;
+    --red:         #F75C5C;
+    --yellow:      #F7C948;
+    --txt:         #E4E8F5;
+    --txt2:        #6E7897;
+    --txt3:        #2E3450;
+    --mono:        'JetBrains Mono', 'Consolas', monospace;
+    --sans:        'Inter', 'SF Pro Display', system-ui, sans-serif;
+    --radius:      10px;
+    --shadow:      0 4px 24px rgba(0,0,0,.4);
+  }
+
+  html, body {
+    height: 100%;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--txt);
+    overflow: hidden;
+  }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-rows: 48px 1fr;
+    height: 100vh;
+    min-width: 0;
+  }
+
+  /* ── Topbar ───────────────────────────────────────────────── */
+  .topbar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    min-width: 0;
+  }
+  .topbar-logo {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -.3px;
+    color: var(--txt);
+  }
+  .topbar-logo span { color: var(--accent); }
+  .topbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .topbar-model {
+    font-size: 11px;
+    color: var(--txt2);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+  }
+  .language-select {
+    appearance: none;
+    background: var(--card);
+    color: var(--txt);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 28px 5px 10px;
+    font-family: var(--sans);
+    font-size: 11px;
+    cursor: pointer;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--txt2) 50%),
+      linear-gradient(135deg, var(--txt2) 50%, transparent 50%);
+    background-position:
+      calc(100% - 13px) 50%,
+      calc(100% - 8px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  .language-select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .topbar-spacer { flex: 1; }
+  .topbar-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 30px;
+    padding: 5px 11px;
+    background: var(--card);
+    color: var(--txt2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color .2s, color .2s, background .2s;
+    position: relative;
+  }
+  .topbar-action:hover,
+  .topbar-action.active {
+    border-color: var(--accent);
+    color: var(--txt);
+    background: #151A27;
+  }
+  .topbar-action.has-alert::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    right: 5px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--yellow);
+    box-shadow: 0 0 8px rgba(247,201,72,.75);
+  }
+  .topbar-action svg { flex-shrink: 0; }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--txt2);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: border-color .2s;
+  }
+  .status-pill:hover { border-color: var(--accent); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--txt3); }
+  .status-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.err { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--txt2);
+    letter-spacing: .8px;
+    text-transform: uppercase;
+  }
+  .new-chat-btn {
+    display: flex; align-items: center; gap: 8px;
+    margin: 12px;
+    padding: 10px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .new-chat-btn:hover { background: var(--accent-dk); }
+  .new-chat-btn svg { flex-shrink: 0; }
+  .clear-history-btn {
+    margin: 0 12px 12px;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--txt2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color .2s, color .2s, background .2s;
+  }
+  .clear-history-btn:hover {
+    background: var(--card);
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .history-item {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: var(--sans);
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--txt2);
+    cursor: default;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background .15s;
+  }
+  .history-item.active {
+    background: var(--card);
+    color: var(--txt);
+  }
+  .history-item:hover { background: var(--card); }
+  .history-empty {
+    padding: 10px;
+    font-size: 12px;
+    color: var(--txt3);
+  }
+
+  .sidebar-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--txt3);
+    display: flex; gap: 6px; align-items: center;
+  }
+  .msg-count-badge {
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 20px;
+  }
+
+  /* ── Chat Area ────────────────────────────────────────────── */
+  .chat-area {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: clamp(16px, 3vw, 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    scroll-behavior: smooth;
+  }
+  .messages::-webkit-scrollbar { width: 5px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+  /* Welcome screen */
+  .welcome {
+    margin: auto;
+    text-align: center;
+    width: min(100%, 520px);
+    padding: clamp(20px, 5vw, 44px);
+  }
+  .welcome-icon {
+    font-size: 52px;
+    margin-bottom: 16px;
+    display: block;
+  }
+  .welcome h2 {
+    font-size: 20px; font-weight: 700;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, var(--txt), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .welcome p { font-size: 13px; color: var(--txt2); line-height: 1.7; }
+  .examples {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .example-chip {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--txt2);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .2s, color .2s;
+  }
+  .example-chip:hover {
+    border-color: var(--accent);
+    color: var(--txt);
+  }
+
+  /* Mesaj balonları */
+  .msg-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    animation: fadeUp .25s ease;
+  }
+  .msg-row.user { flex-direction: row-reverse; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .avatar.user {
+    background: #1E2F6A;
+    color: #7EAAFF;
+    border: 1px solid #2D4490;
+  }
+  .avatar.ai {
+    background: #0D2B1E;
+    color: var(--green);
+    border: 1px solid #1A4030;
+  }
+
+  .bubble {
+    max-width: min(72%, 760px);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--txt);
+  }
+  .msg-row.user .bubble {
+    background: #151C30;
+    border-color: #1D2840;
+    border-top-right-radius: 3px;
+  }
+  .msg-row.ai .bubble {
+    border-top-left-radius: 3px;
+  }
+
+  /* Kod bloğu */
+  .code-block {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    overflow: hidden;
+    max-width: min(72%, 760px);
+  }
+  .msg-row.user .code-block { margin-left: 44px; }
+  .msg-row.ai  .code-block { margin-left: 44px; }
+  
+  .code-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 12px;
+    background: #0E1118;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--txt2);
+  }
+  .code-copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--txt2);
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+    font-family: var(--sans);
+  }
+  .code-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  pre.code-body {
+    margin: 0;
+    padding: 14px 16px;
+    background: #090B10;
+    color: #A8D0FF;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  /* FreeCAD sonuç pill */
+  .fc-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border: 1px solid;
+  }
+  .fc-result.ok {
+    background: #0D2B1E;
+    border-color: #1A4030;
+    color: var(--green);
+  }
+  .fc-result.err {
+    background: #2B0D0D;
+    border-color: #401A1A;
+    color: var(--red);
+  }
+
+  /* Thinking indicator */
+  .thinking {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    border-top-left-radius: 3px;
+    font-size: 13px;
+    color: var(--txt2);
+    max-width: 220px;
+  }
+  .dots span {
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: var(--txt2);
+    border-radius: 50%;
+    animation: dot-bounce .9s infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: .15s; }
+  .dots span:nth-child(3) { animation-delay: .30s; }
+  @keyframes dot-bounce {
+    0%,80%,100% { transform: translateY(0); opacity:.4; }
+    40%          { transform: translateY(-5px); opacity:1; }
+  }
+
+  /* ── Input Bar ────────────────────────────────────────────── */
+  .input-bar {
+    padding: 14px 24px 18px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 10px 10px 16px;
+    transition: border-color .2s;
+  }
+  .input-row:focus-within { border-color: var(--accent); }
+
+  #user-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--txt);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.6;
+    resize: none;
+    min-height: 20px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  #user-input::placeholder { color: var(--txt3); }
+  #user-input::-webkit-scrollbar { width: 4px; }
+  #user-input::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .send-btn {
+    width: 38px; height: 38px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background .2s, transform .1s;
+  }
+  .send-btn:hover   { background: var(--accent-dk); }
+  .send-btn:active  { transform: scale(.92); }
+  .send-btn:disabled{ background: var(--txt3); cursor: not-allowed; }
+  .send-btn svg { color: #fff; }
+
+  .input-hint {
+    font-size: 10.5px;
+    color: var(--txt3);
+    margin-top: 6px;
+    text-align: center;
+  }
+
+  /* ── Console Drawer ───────────────────────────────────────── */
+  .console-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 800;
+    width: min(560px, calc(100vw - 36px));
+    height: min(420px, calc(100vh - 88px));
+    box-shadow: var(--shadow);
+    transform: translateY(calc(100% + 28px));
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .22s ease, opacity .22s ease;
+  }
+  .console-panel.open {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: all;
+  }
+  .console-header {
+    padding: 0 14px;
+    height: 44px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .console-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--txt2);
+    letter-spacing: .6px;
+    text-transform: uppercase;
+  }
+  .console-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .console-clear-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--txt3);
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: border-color .2s, color .2s;
+  }
+  .console-clear-btn:hover { border-color: var(--txt2); color: var(--txt2); }
+  .console-close-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--txt2);
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+  }
+  .console-close-btn:hover { border-color: var(--accent); color: var(--txt); }
+
+  #console-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    line-height: 1.7;
+    color: #5FD4A0;
+    background: #080A0F;
+  }
+  #console-log::-webkit-scrollbar { width: 4px; }
+  #console-log::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-line {
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+    word-break: break-word;
+  }
+  .log-line .ts { color: var(--txt3); margin-right: 6px; }
+  .log-line.info    .msg { color: #5FD4A0; }
+  .log-line.success .msg { color: var(--green); }
+  .log-line.warn    .msg { color: var(--yellow); }
+  .log-line.error   .msg { color: var(--red); }
+  .log-line.code    .msg { color: #A8D0FF; }
+  .log-line.system  .msg { color: var(--txt2); }
+
+  .console-footer {
+    padding: 8px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 6px;
+  }
+  .console-btn {
+    flex: 1;
+    padding: 7px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--txt2);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background .2s, color .2s, border-color .2s;
+  }
+  .console-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .console-btn:hover:not(.primary) {
+    background: var(--card);
+    color: var(--txt);
+    border-color: var(--txt2);
+  }
+  .console-btn.primary:hover { background: var(--accent-dk); }
+
+  /* ── Toasts ───────────────────────────────────────────────── */
+  .toast-container {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 999;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid;
+    animation: toastIn .25s ease;
+    pointer-events: all;
+  }
+  @keyframes toastIn {
+    from { opacity:0; transform: translateX(20px); }
+    to   { opacity:1; transform: translateX(0); }
+  }
+  .toast.ok  { background:#0D2B1E; border-color:#1A4030; color:var(--green); }
+  .toast.err { background:#2B0D0D; border-color:#401A1A; color:var(--red); }
+  .toast.info{ background:var(--card); border-color:var(--border); color:var(--txt2); }
+
+  @media (max-width: 980px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 48px auto minmax(0, 1fr);
+    }
+    .sidebar {
+      grid-row: 2;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      min-height: 54px;
+    }
+    .sidebar-header {
+      border-bottom: none;
+      padding: 0 14px;
+    }
+    .new-chat-btn {
+      justify-self: start;
+      margin: 8px;
+      white-space: nowrap;
+    }
+    .history-list {
+      display: none;
+    }
+    .sidebar-footer {
+      border-top: none;
+      padding: 0 14px;
+      white-space: nowrap;
+    }
+    .bubble,
+    .code-block {
+      max-width: 86%;
+    }
+  }
+
+  @media (max-width: 680px) {
+    html, body {
+      overflow: hidden;
+    }
+    .app {
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+    .topbar {
+      min-height: 48px;
+      height: auto;
+      padding: 9px 12px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .topbar-logo {
+      flex: 1 1 160px;
+    }
+    .topbar-sep,
+    .topbar-model {
+      display: none;
+    }
+    .topbar-spacer {
+      display: none;
+    }
+    .status-pill {
+      order: 4;
+      flex: 1 1 100%;
+      justify-content: center;
+    }
+    .language-select,
+    .topbar-action {
+      min-height: 32px;
+    }
+    .sidebar {
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 8px 10px;
+    }
+    .sidebar-header,
+    .sidebar-footer {
+      display: none;
+    }
+    .new-chat-btn {
+      margin: 0;
+      justify-self: stretch;
+      justify-content: center;
+    }
+    .messages {
+      padding: 14px;
+      gap: 14px;
+    }
+    .welcome-icon {
+      font-size: 40px;
+    }
+    .welcome h2 {
+      font-size: 18px;
+    }
+    .examples {
+      gap: 7px;
+    }
+    .example-chip {
+      font-size: 12px;
+      padding: 9px 11px;
+    }
+    .bubble,
+    .code-block {
+      max-width: 100%;
+    }
+    .msg-row {
+      gap: 8px;
+    }
+    .avatar {
+      width: 28px;
+      height: 28px;
+    }
+    .input-bar {
+      padding: 10px 12px 12px;
+    }
+    .input-row {
+      border-radius: 10px;
+      padding: 8px 8px 8px 12px;
+    }
+    .input-hint {
+      display: none;
+    }
+    .console-panel {
+      right: 10px;
+      bottom: 10px;
+      width: calc(100vw - 20px);
+      height: min(440px, calc(100vh - 86px));
+      border-radius: 10px;
+    }
+    .toast-container {
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Topbar ───────────────────────────────────────── -->
+  <header class="topbar">
+    <span class="topbar-logo">Free<span>CAD</span> Text→3D</span>
+    <div class="topbar-sep"></div>
+    <span class="topbar-model">{{ model }}</span>
+    <select class="language-select" id="language-select" aria-label="Language">
+      <option value="tr">TR</option>
+      <option value="en">EN</option>
+    </select>
+    <div class="topbar-spacer"></div>
+    <button class="topbar-action" id="console-toggle" onclick="toggleConsole()" aria-expanded="false" aria-controls="console-panel">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24" aria-hidden="true">
+        <polyline points="4 17 10 11 4 5"></polyline>
+        <line x1="12" y1="19" x2="20" y2="19"></line>
+      </svg>
+      <span id="console-toggle-text">Konsol</span>
+    </button>
+    <div class="status-pill" id="freecad-status" onclick="launchFreeCAD()">
+      <span class="status-dot {% if freecad_ok %}ok{% else %}err{% endif %}" id="status-dot"></span>
+      <span id="status-text">{% if freecad_ok %}FreeCAD Hazır{% else %}FreeCAD Bulunamadı{% endif %}</span>
+    </div>
+  </header>
+
+  <!-- ── Sidebar ──────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">Oturumlar</div>
+    <button class="new-chat-btn" onclick="newChat()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Yeni Chat
+    </button>
+    <button class="clear-history-btn" onclick="clearAllChats()">Geçmişi Temizle</button>
+    <div class="history-list" id="history-list">
+      <div class="history-empty">Kayıtlı chat yok</div>
+    </div>
+    <div class="sidebar-footer">
+      Toplam mesaj: <span class="msg-count-badge" id="msg-count">0</span>
+    </div>
+  </aside>
+
+  <!-- ── Chat ─────────────────────────────────────────── -->
+  <main class="chat-area">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <span class="welcome-icon">🧱</span>
+        <h2>3D Model Oluşturmaya Hazır</h2>
+        <p>FreeCAD Python API ile tam uyumlu. Türkçe olarak bir 3D model tarif et, anında FreeCAD'de oluşturayım.</p>
+        <div class="examples">
+          <button class="example-chip" onclick="fillExample(this)">10×10×5 cm boyutlarında üstü açık dikdörtgen kutu</button>
+          <button class="example-chip" onclick="fillExample(this)">5 cm çaplı, 10 cm yüksekliğinde, 2 mm et kalınlıklı içi boş silindir</button>
+          <button class="example-chip" onclick="fillExample(this)">Üstte 2 cm, altta 4 cm çaplı, 8 cm yüksekliğinde koni</button>
+          <button class="example-chip" onclick="fillExample(this)">20×20 mm taban, 1mm fileto ile köşeleri yuvarlatılmış küp</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-row">
+        <textarea id="user-input" rows="1" placeholder="Bir 3D model tarif et… (Shift+Enter yeni satır)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint">Enter → Gönder &nbsp;·&nbsp; Shift+Enter → Yeni satır</div>
+    </div>
+  </main>
+
+  <!-- ── Console ──────────────────────────────────────── -->
+  <aside class="console-panel" id="console-panel" aria-hidden="true">
+    <div class="console-header">
+      <span class="console-title">⚙ FreeCAD Konsol</span>
+      <div class="console-header-actions">
+        <button class="console-clear-btn" onclick="clearLog()">Temizle</button>
+        <button class="console-close-btn" onclick="closeConsole()" aria-label="Konsolu kapat">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="console-log"></div>
+    <div class="console-footer">
+      <button class="console-btn primary" onclick="launchFreeCAD()">FreeCAD Aç</button>
+      <button class="console-btn" onclick="checkStatus()">Durum</button>
+      <button class="console-btn" onclick="loadServerLogs()">Loglar</button>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let busy        = false;
+let msgCount    = 0;
+let sessionMsgs = [];
+let currentLang = localStorage.getItem("freecadTextTo3dLang") || "tr";
+let currentChatId = localStorage.getItem("freecadTextTo3dChatId") || null;
+let chats = [];
+
+const I18N = {
+  tr: {
+    freecadReady: "FreeCAD Hazır",
+    freecadMissing: "FreeCAD Bulunamadı",
+    freecadNone: "FreeCAD Yok",
+    sessions: "Oturumlar",
+    newChat: "Yeni Chat",
+    clearHistory: "Geçmişi Temizle",
+    emptyHistory: "Kayıtlı chat yok",
+    historyCleared: "Tüm chat geçmişi temizlendi",
+    clearConfirm: "Tüm chat geçmişi silinsin mi?",
+    currentSession: "Mevcut oturum",
+    totalMessages: "Toplam mesaj:",
+    welcomeTitle: "3D Model Oluşturmaya Hazır",
+    welcomeText: "FreeCAD Python API ile tam uyumlu. Türkçe olarak bir 3D model tarif et, anında FreeCAD'de oluşturayım.",
+    placeholder: "Bir 3D model tarif et… (Shift+Enter yeni satır)",
+    inputHint: "Enter → Gönder · Shift+Enter → Yeni satır",
+    consoleTitle: "⚙ FreeCAD Konsol",
+    consoleShort: "Konsol",
+    clear: "Temizle",
+    closeConsole: "Konsolu kapat",
+    openFreeCAD: "FreeCAD Aç",
+    status: "Durum",
+    refreshLogs: "Loglar",
+    copied: "Kopyalandı!",
+    copy: "Kopyala",
+    generatedCode: "Kod oluşturuldu.",
+    codeTitle: "⚙ FreeCAD Python Kodu",
+    generating: "Oluşturuluyor",
+    connectionError: "Bağlantı hatası",
+    newChatStarted: "Yeni chat başlatıldı",
+    launchingFreeCAD: "FreeCAD başlatılıyor…",
+    freecadOpening: "FreeCAD açılıyor…",
+    installed: "FreeCAD kurulu",
+    model: "Model",
+    output: "Çıktı",
+    eventLog: "Olay logu",
+    guiLog: "GUI logu",
+    logsLoaded: "Sunucu logları yüklendi",
+    codeSent: "Kod gönderildi → FreeCAD",
+    started: "FreeCAD Text-to-3D başlatıldı",
+    downloadFreeCAD: "→ freecad.org adresinden indirin",
+    examples: [
+      "10×10×5 cm boyutlarında üstü açık dikdörtgen kutu",
+      "5 cm çaplı, 10 cm yüksekliğinde, 2 mm et kalınlıklı içi boş silindir",
+      "Üstte 2 cm, altta 4 cm çaplı, 8 cm yüksekliğinde koni",
+      "20×20 mm taban, 1mm fileto ile köşeleri yuvarlatılmış küp"
+    ]
+  },
+  en: {
+    freecadReady: "FreeCAD Ready",
+    freecadMissing: "FreeCAD Not Found",
+    freecadNone: "No FreeCAD",
+    sessions: "Sessions",
+    newChat: "New Chat",
+    clearHistory: "Clear History",
+    emptyHistory: "No saved chats",
+    historyCleared: "All chat history cleared",
+    clearConfirm: "Delete all chat history?",
+    currentSession: "Current session",
+    totalMessages: "Total messages:",
+    welcomeTitle: "Ready to Create a 3D Model",
+    welcomeText: "Fully compatible with the FreeCAD Python API. Describe a 3D model in English and I will create it in FreeCAD.",
+    placeholder: "Describe a 3D model… (Shift+Enter for a new line)",
+    inputHint: "Enter → Send · Shift+Enter → New line",
+    consoleTitle: "⚙ FreeCAD Console",
+    consoleShort: "Console",
+    clear: "Clear",
+    closeConsole: "Close console",
+    openFreeCAD: "Open FreeCAD",
+    status: "Status",
+    refreshLogs: "Logs",
+    copied: "Copied!",
+    copy: "Copy",
+    generatedCode: "Code generated.",
+    codeTitle: "⚙ FreeCAD Python Code",
+    generating: "Generating",
+    connectionError: "Connection error",
+    newChatStarted: "New chat started",
+    launchingFreeCAD: "Launching FreeCAD…",
+    freecadOpening: "Opening FreeCAD…",
+    installed: "FreeCAD installed",
+    model: "Model",
+    output: "Output",
+    eventLog: "Event log",
+    guiLog: "GUI log",
+    logsLoaded: "Server logs loaded",
+    codeSent: "Code sent → FreeCAD",
+    started: "FreeCAD Text-to-3D started",
+    downloadFreeCAD: "→ Download it from freecad.org",
+    examples: [
+      "An open rectangular box sized 10×10×5 cm",
+      "A hollow cylinder with 5 cm diameter, 10 cm height, and 2 mm wall thickness",
+      "A cone with 2 cm top diameter, 4 cm bottom diameter, and 8 cm height",
+      "A cube with a 20×20 mm base and rounded corners using a 1 mm fillet"
+    ]
+  }
+};
+
+function t(key) {
+  return I18N[currentLang][key] || I18N.tr[key] || key;
+}
+
+// ── Textarea auto-resize ───────────────────────────────────────────────────
+const textarea = document.getElementById("user-input");
+textarea.addEventListener("input", () => {
+  textarea.style.height = "auto";
+  textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
+});
+textarea.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ── Send ───────────────────────────────────────────────────────────────────
+async function sendMessage() {
+  if (busy) return;
+  const text = textarea.value.trim();
+  if (!text) return;
+
+  textarea.value = "";
+  textarea.style.height = "auto";
+
+  // Kullanıcı balonunu ekle
+  appendUserMsg(text);
+  hideWelcome();
+
+  // Thinking göster
+  const thinkId = showThinking();
+  setInputEnabled(false);
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, language: currentLang, chat_id: currentChatId })
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      removeThinking(thinkId);
+      appendError(data.error);
+      log("Hata: " + data.error, "error");
+      return;
+    }
+
+    removeThinking(thinkId);
+
+    // AI cevabını ekle
+    appendAIMsg(data.description, data.python_code, data.freecad_result);
+
+    // FreeCAD sonucu
+    const fcr = data.freecad_result;
+    if (fcr) {
+      if (fcr.success) {
+        log("✓ " + fcr.message, "success");
+        toast(fcr.message, "ok");
+      } else {
+        log("✗ " + fcr.message, "error");
+        toast(fcr.message, "err");
+      }
+    }
+
+    // Sayaçları güncelle
+    msgCount = data.history_count;
+    currentChatId = data.chat_id;
+    localStorage.setItem("freecadTextTo3dChatId", currentChatId);
+    document.getElementById("msg-count").textContent = msgCount;
+    sessionMsgs.push(text.substring(0, 40));
+    await loadChats();
+
+    if (data.python_code) {
+      log(t("codeSent"), "code");
+    }
+
+  } catch (err) {
+    removeThinking(thinkId);
+    appendError(t("connectionError") + ": " + err.message);
+    log(t("connectionError") + ": " + err.message, "error");
+  } finally {
+    setInputEnabled(true);
+  }
+}
+
+// ── Yeni chat ─────────────────────────────────────────────────────────────
+async function newChat() {
+  const res = await fetch("/api/new", { method: "POST" });
+  const data = await res.json();
+  currentChatId = data.chat.id;
+  localStorage.setItem("freecadTextTo3dChatId", currentChatId);
+
+  document.getElementById("messages").innerHTML = "";
+  showWelcome();
+  msgCount = 0;
+  sessionMsgs = [];
+  document.getElementById("msg-count").textContent = "0";
+  clearLog();
+  log(t("newChatStarted"), "system");
+  await loadChats();
+}
+
+// ── FreeCAD ───────────────────────────────────────────────────────────────
+async function launchFreeCAD() {
+  log(t("launchingFreeCAD"), "system");
+  try {
+    const res  = await fetch("/api/launch", { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      log("✓ " + data.message, "success");
+      toast(t("freecadOpening"), "ok");
+    } else {
+      log("✗ " + data.message, "error");
+      toast(data.message, "err");
+    }
+  } catch(e) {
+    log(t("connectionError"), "error");
+  }
+}
+
+async function checkStatus() {
+  const res  = await fetch("/api/status");
+  const data = await res.json();
+  log(`${t("installed")}: ${data.freecad_installed}`, data.freecad_installed ? "success" : "warn");
+  log(`${t("model")}: ${data.model}`, "info");
+  log(`${t("output")}: ${data.output_dir}`, "system");
+  log(`${t("eventLog")}: ${data.event_log_path}`, "system");
+  log(`${t("guiLog")}: ${data.gui_log_path}`, "system");
+  
+  const dot  = document.getElementById("status-dot");
+  const txt  = document.getElementById("status-text");
+  if (data.freecad_installed) {
+    dot.className = "status-dot ok";
+    txt.textContent = t("freecadReady");
+  } else {
+    dot.className = "status-dot err";
+    txt.textContent = t("freecadNone");
+  }
+}
+
+async function loadServerLogs() {
+  openConsole();
+  try {
+    const res = await fetch("/api/logs?limit=120");
+    const data = await res.json();
+    clearLog();
+    for (const event of data.events || []) {
+      logEvent(event);
+    }
+    log(t("logsLoaded"), "system");
+  } catch (e) {
+    log(t("connectionError") + ": " + e.message, "error");
+  }
+}
+
+// ── DOM helpers ───────────────────────────────────────────────────────────
+function appendUserMsg(text) {
+  const row = document.createElement("div");
+  row.className = "msg-row user";
+  const avatar = document.createElement("div");
+  avatar.className = "avatar user";
+  avatar.textContent = currentLang === "en" ? "You" : "Sen";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = escHtml(text);
+  row.appendChild(avatar);
+  row.appendChild(bubble);
+  document.getElementById("messages").appendChild(row);
+  scrollBottom();
+}
+
+function appendAIMsg(text, code, freecadResult = null) {
+  const msgs = document.getElementById("messages");
+
+  const row = document.createElement("div");
+  row.className = "msg-row ai";
+  const avatar = document.createElement("div");
+  avatar.className = "avatar ai";
+  avatar.textContent = "AI";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = escHtml(text) || `<em style='color:var(--txt2)'>${t("generatedCode")}</em>`;
+  row.appendChild(avatar);
+  row.appendChild(bubble);
+  msgs.appendChild(row);
+
+  if (code) {
+    const codeBlock = document.createElement("div");
+    codeBlock.className = "code-block";
+    const header = document.createElement("div");
+    header.className = "code-header";
+    const label = document.createElement("span");
+    label.textContent = t("codeTitle");
+    const copyButton = document.createElement("button");
+    copyButton.className = "code-copy-btn";
+    copyButton.textContent = t("copy");
+    copyButton.onclick = () => copyCode(copyButton);
+    const pre = document.createElement("pre");
+    pre.className = "code-body";
+    pre.textContent = code;
+    header.appendChild(label);
+    header.appendChild(copyButton);
+    codeBlock.appendChild(header);
+    codeBlock.appendChild(pre);
+    msgs.appendChild(codeBlock);
+  }
+
+  if (freecadResult) {
+    const result = document.createElement("div");
+    result.className = `fc-result ${freecadResult.success ? "ok" : "err"}`;
+    result.textContent = `${freecadResult.success ? "✓" : "✗"} ${freecadResult.message}`;
+    msgs.appendChild(result);
+  }
+
+  scrollBottom();
+}
+
+function appendError(msg) {
+  const row = document.createElement("div");
+  row.className = "msg-row ai";
+  row.innerHTML = `
+    <div class="avatar ai">AI</div>
+    <div class="bubble" style="border-color:#401A1A; color:var(--red);">⚠ ${escHtml(msg)}</div>
+  `;
+  document.getElementById("messages").appendChild(row);
+  scrollBottom();
+}
+
+let thinkingCount = 0;
+function showThinking() {
+  const id = "think-" + (++thinkingCount);
+  const row = document.createElement("div");
+  row.id = id;
+  row.className = "msg-row ai";
+  row.innerHTML = `
+    <div class="avatar ai">AI</div>
+    <div class="thinking">
+      <span>${t("generating")}</span>
+      <span class="dots"><span></span><span></span><span></span></span>
+    </div>
+  `;
+  document.getElementById("messages").appendChild(row);
+  scrollBottom();
+  return id;
+}
+function removeThinking(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function hideWelcome() {
+  const w = document.getElementById("welcome");
+  if (w) w.style.display = "none";
+}
+function showWelcome() {
+  const msgs = document.getElementById("messages");
+  const w = document.createElement("div");
+  w.id = "welcome";
+  w.className = "welcome";
+  w.innerHTML = `
+    <span class="welcome-icon">🧱</span>
+    <h2>${t("welcomeTitle")}</h2>
+    <p>${t("welcomeText")}</p>
+    <div class="examples">
+      ${t("examples").map(example => `<button class="example-chip" onclick="fillExample(this)">${example}</button>`).join("")}
+    </div>
+  `;
+  msgs.appendChild(w);
+}
+
+async function loadChats() {
+  const res = await fetch("/api/chats");
+  const data = await res.json();
+  chats = data.chats || [];
+  renderChatList();
+
+  const currentExists = chats.some(chat => chat.id === currentChatId);
+  if (!currentExists) {
+    currentChatId = chats[0]?.id || null;
+    if (currentChatId) {
+      localStorage.setItem("freecadTextTo3dChatId", currentChatId);
+    } else {
+      localStorage.removeItem("freecadTextTo3dChatId");
+    }
+  }
+
+  if (currentChatId) {
+    await loadChat(currentChatId);
+  }
+}
+
+function renderChatList() {
+  const list = document.getElementById("history-list");
+  if (!chats.length) {
+    list.innerHTML = `<div class="history-empty">${t("emptyHistory")}</div>`;
+    return;
+  }
+
+  list.innerHTML = chats.map(chat => `
+    <button class="history-item ${chat.id === currentChatId ? "active" : ""}" onclick="loadChat('${chat.id}')">
+      ${escHtml(chat.title || t("currentSession"))}
+    </button>
+  `).join("");
+}
+
+async function loadChat(chatId) {
+  if (!chatId) return;
+  const res = await fetch(`/api/chats/${chatId}`);
+  const data = await res.json();
+  if (data.error) {
+    log(data.error, "error");
+    return;
+  }
+
+  currentChatId = chatId;
+  localStorage.setItem("freecadTextTo3dChatId", currentChatId);
+  renderChat(data.chat);
+  renderChatList();
+}
+
+function renderChat(chat) {
+  const msgs = document.getElementById("messages");
+  msgs.innerHTML = "";
+  const turns = chat.turns || [];
+  msgCount = turns.length;
+  sessionMsgs = turns.map(turn => (turn.user || "").substring(0, 40));
+  document.getElementById("msg-count").textContent = msgCount;
+
+  if (!turns.length) {
+    showWelcome();
+    return;
+  }
+
+  for (const turn of turns) {
+    appendUserMsg(turn.user || "");
+    appendAIMsg(turn.description || "", turn.python_code || "", turn.freecad_result || null);
+  }
+}
+
+async function clearAllChats() {
+  if (!confirm(t("clearConfirm"))) return;
+  await fetch("/api/chats/clear", { method: "POST" });
+  currentChatId = null;
+  localStorage.removeItem("freecadTextTo3dChatId");
+  chats = [];
+  document.getElementById("messages").innerHTML = "";
+  showWelcome();
+  msgCount = 0;
+  sessionMsgs = [];
+  document.getElementById("msg-count").textContent = "0";
+  renderChatList();
+  clearLog();
+  log(t("historyCleared"), "system");
+}
+
+function fillExample(btn) {
+  textarea.value = btn.textContent;
+  textarea.dispatchEvent(new Event("input"));
+  textarea.focus();
+}
+
+function renderExamples() {
+  const examples = document.querySelector(".examples");
+  if (!examples) return;
+  examples.innerHTML = t("examples")
+    .map(example => `<button class="example-chip" onclick="fillExample(this)">${example}</button>`)
+    .join("");
+}
+
+function applyTranslations() {
+  document.documentElement.lang = currentLang;
+  document.getElementById("language-select").value = currentLang;
+  textarea.placeholder = t("placeholder");
+  document.getElementById("console-toggle-text").textContent = t("consoleShort");
+
+  const statusDot = document.getElementById("status-dot");
+  document.getElementById("status-text").textContent =
+    statusDot.classList.contains("ok") ? t("freecadReady") : t("freecadMissing");
+
+  document.querySelector(".sidebar-header").textContent = t("sessions");
+  document.querySelector(".new-chat-btn").lastChild.textContent = ` ${t("newChat")}`;
+  document.querySelector(".clear-history-btn").textContent = t("clearHistory");
+  document.querySelector(".sidebar-footer").innerHTML =
+    `${t("totalMessages")} <span class="msg-count-badge" id="msg-count">${msgCount}</span>`;
+  renderChatList();
+
+  const welcome = document.getElementById("welcome");
+  if (welcome) {
+    welcome.querySelector("h2").textContent = t("welcomeTitle");
+    welcome.querySelector("p").textContent = t("welcomeText");
+    renderExamples();
+  }
+
+  document.querySelector(".input-hint").textContent = t("inputHint");
+  document.querySelector(".console-title").textContent = t("consoleTitle");
+  document.querySelector(".console-clear-btn").textContent = t("clear");
+  document.querySelector(".console-close-btn").setAttribute("aria-label", t("closeConsole"));
+  const consoleButtons = document.querySelectorAll(".console-btn");
+  consoleButtons[0].textContent = t("openFreeCAD");
+  consoleButtons[1].textContent = t("status");
+  consoleButtons[2].textContent = t("refreshLogs");
+}
+
+function setInputEnabled(enabled) {
+  busy = !enabled;
+  textarea.disabled = !enabled;
+  document.getElementById("send-btn").disabled = !enabled;
+}
+
+function toggleConsole() {
+  const panel = document.getElementById("console-panel");
+  if (panel.classList.contains("open")) {
+    closeConsole();
+  } else {
+    openConsole();
+  }
+}
+
+function openConsole() {
+  const panel = document.getElementById("console-panel");
+  const toggle = document.getElementById("console-toggle");
+  panel.classList.add("open");
+  panel.setAttribute("aria-hidden", "false");
+  toggle.classList.add("active");
+  toggle.classList.remove("has-alert");
+  toggle.setAttribute("aria-expanded", "true");
+}
+
+function closeConsole() {
+  const panel = document.getElementById("console-panel");
+  const toggle = document.getElementById("console-toggle");
+  panel.classList.remove("open");
+  panel.setAttribute("aria-hidden", "true");
+  toggle.classList.remove("active");
+  toggle.setAttribute("aria-expanded", "false");
+}
+
+function scrollBottom() {
+  const msgs = document.getElementById("messages");
+  setTimeout(() => msgs.scrollTop = msgs.scrollHeight, 30);
+}
+
+function copyCode(btn) {
+  const pre = btn.closest(".code-block").querySelector("pre");
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    btn.textContent = t("copied");
+    setTimeout(() => btn.textContent = t("copy"), 2000);
+  });
+}
+
+function escHtml(t) {
+  return String(t)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+}
+
+// ── Console log ───────────────────────────────────────────────────────────
+function log(msg, level = "info") {
+  const c   = document.getElementById("console-log");
+  const now = new Date().toLocaleTimeString(currentLang === "en" ? "en-US" : "tr-TR", {hour12: false});
+  const line = document.createElement("div");
+  line.className = `log-line ${level}`;
+  line.innerHTML = `<span class="ts">${now}</span><span class="msg">${escHtml(msg)}</span>`;
+  c.appendChild(line);
+  c.scrollTop = c.scrollHeight;
+  const panel = document.getElementById("console-panel");
+  if (!panel.classList.contains("open") && (level === "error" || level === "warn")) {
+    document.getElementById("console-toggle").classList.add("has-alert");
+  }
+}
+
+function logEvent(event) {
+  const level = event.level || "info";
+  const source = event.source || "app";
+  const name = event.event || "event";
+  const message = event.message || "";
+  const data = event.data && Object.keys(event.data).length
+    ? " " + JSON.stringify(event.data)
+    : "";
+  log(`[${source}/${name}] ${message}${data}`, level === "success" ? "success" : level);
+}
+function clearLog() { document.getElementById("console-log").innerHTML = ""; }
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function toast(msg, type = "info") {
+  const tc = document.getElementById("toasts");
+  const t  = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  tc.appendChild(t);
+  setTimeout(() => t.style.opacity = "0", 3000);
+  setTimeout(() => t.remove(), 3300);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+document.getElementById("language-select").addEventListener("change", e => {
+  currentLang = e.target.value;
+  localStorage.setItem("freecadTextTo3dLang", currentLang);
+  applyTranslations();
+});
+
+applyTranslations();
+loadChats();
+log(t("started"), "system");
+log(`${t("model")}: {{ model }}`, "system");
+{% if not freecad_ok %}
+log(`⚠ ${t("freecadMissing")}: /Applications/FreeCAD.app`, "warn");
+log(t("downloadFreeCAD"), "warn");
+{% else %}
+log(`✓ ${t("freecadReady")}`, "success");
+{% endif %}
+</script>
+</body>
+</html>
