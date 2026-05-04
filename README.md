@@ -4,10 +4,11 @@
 
 A local web application that creates FreeCAD 3D models from natural-language prompts using OpenAI, Flask, and FreeCADCmd.
 
-The project currently targets macOS and expects FreeCAD at:
+The project supports macOS and Windows. Default FreeCAD discovery checks the usual install locations:
 
 ```text
-/Applications/FreeCAD.app
+macOS:   /Applications/FreeCAD.app
+Windows: C:\Program Files\FreeCAD*\bin\FreeCADCmd.exe
 ```
 
 ## Features
@@ -52,17 +53,17 @@ FreeCAD GUI bridge
 
 ## Requirements
 
-- macOS
-- Python 3.9+
+- macOS or Windows
+- Python 3.10+
 - FreeCAD
 - OpenAI API key
 - Internet connection
 
-Windows and Linux support is not fully wired yet. For other operating systems or custom FreeCAD installations, update the FreeCAD paths in [config.py](config.py) and [freecad_bridge.py](freecad_bridge.py).
+For custom FreeCAD installations, set `FREECAD_HOME`, `FREECAD_CMD`, `FREECAD_GUI`, or `FREECAD_PYTHON` in `.env` or your shell.
 
 ## FreeCAD Compatibility
 
-This project has been validated on macOS with FreeCAD `1.1.1`.
+This project has been validated on macOS with FreeCAD `1.1.1`. Windows support is wired for the standard FreeCAD layout under `C:\Program Files\FreeCAD...\bin`.
 
 The local test installation reports:
 
@@ -71,7 +72,7 @@ CFBundleVersion: 1.1.1
 FreeCADCmd log: FreeCAD 1.1.1, Libs: 1.1.1R20260414
 ```
 
-Older or newer FreeCAD versions may work, but the default paths and GUI bridge behavior are currently tested against FreeCAD `1.1.1`.
+Older or newer FreeCAD versions may work, but the default paths, TechDraw template handling, and GUI bridge behavior are designed around FreeCAD `1.1.x`.
 
 ## Installation
 
@@ -96,6 +97,13 @@ On macOS, move `FreeCAD.app` into the `Applications` folder. Verify the path:
 
 ```bash
 ls /Applications/FreeCAD.app
+```
+
+On Windows, install FreeCAD into the default `Program Files` location, then verify that one of these files exists:
+
+```text
+C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe
+C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe
 ```
 
 ### 3. Configure Your OpenAI API Key
@@ -124,7 +132,7 @@ Do not commit `.env`. It is ignored by [.gitignore](.gitignore).
 
 ## Running
 
-### Quick Start
+### macOS Quick Start
 
 ```bash
 chmod +x start.sh
@@ -140,13 +148,24 @@ chmod +x start.sh
 - Output directory creation
 - Flask app startup
 
+### Windows Quick Start
+
+Open PowerShell in the project folder:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\start.ps1
+```
+
+`start.ps1` checks Python, detects FreeCAD from `Program Files` or environment variables, creates `venv`, installs dependencies, and starts the app.
+
 The app runs at:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-### Manual Start
+### Manual Start On macOS
 
 ```bash
 python3 -m venv venv
@@ -160,6 +179,16 @@ If the virtual environment already exists:
 
 ```bash
 source venv/bin/activate
+python app.py
+```
+
+### Manual Start On Windows
+
+```powershell
+py -3 -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python app.py
 ```
 
@@ -290,9 +319,10 @@ Main settings live in [config.py](config.py).
 |---|---|---|
 | `OPENAI_API_KEY` | `.env` or environment variable | OpenAI API key |
 | `OPENAI_MODEL` | `gpt-3.5-turbo` | Model used for code generation |
-| `FREECAD_PATH` | `/Applications/FreeCAD.app/Contents/Resources/bin/FreeCADCmd` | FreeCADCmd path |
-| `FREECAD_PYTHON` | `/Applications/FreeCAD.app/Contents/Resources/bin/python` | FreeCAD Python path |
-| `FREECAD_GUI` | `/Applications/FreeCAD.app/Contents/MacOS/FreeCAD` | FreeCAD GUI path |
+| `FREECAD_HOME` / `FREECAD_APP_DIR` / `FREECAD_ROOT` | auto-detected | FreeCAD install root |
+| `FREECAD_CMD` / `FREECAD_PATH` | auto-detected | FreeCADCmd executable path |
+| `FREECAD_PYTHON` | auto-detected | FreeCAD Python path |
+| `FREECAD_GUI` | auto-detected | FreeCAD GUI executable path |
 | `FLASK_HOST` | `127.0.0.1` | Flask host |
 | `FLASK_PORT` | `5000` | Flask port |
 | `DEBUG` | `False` | Flask debug mode |
@@ -306,6 +336,18 @@ Common `.env` settings:
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-5.4
 OUTPUT_DIR=~/freecad_text_to_3d_output
+```
+
+Optional FreeCAD overrides:
+
+```env
+# macOS
+FREECAD_APP_DIR=/Applications/FreeCAD.app
+
+# Windows
+FREECAD_HOME='C:\Program Files\FreeCAD 1.1'
+FREECAD_CMD='C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe'
+FREECAD_GUI='C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe'
 ```
 
 ## API Endpoints
@@ -357,6 +399,7 @@ freecad_text_to_3d/
 ├── openai_bridge.py
 ├── requirements.txt
 ├── start.sh
+├── start.ps1
 ├── templates/
 │   └── index.html
 ├── .env.example
@@ -376,16 +419,25 @@ File roles:
 - [config.py](config.py): Environment variables, FreeCAD paths, and output directory settings
 - [templates/index.html](templates/index.html): Web UI
 - [start.sh](start.sh): macOS quick setup and launch script
+- [start.ps1](start.ps1): Windows quick setup and launch script
 
 ## Troubleshooting
 
 ### `ModuleNotFoundError: No module named 'flask'`
 
-Activate the virtual environment and install dependencies:
+Activate the virtual environment and install dependencies on macOS:
 
 ```bash
 source venv/bin/activate
 pip install -r requirements.txt
+python app.py
+```
+
+On Windows:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 python app.py
 ```
 
@@ -399,13 +451,33 @@ export OPENAI_API_KEY="sk-..."
 
 ### FreeCAD Is Not Found
 
-Make sure FreeCAD exists at:
+On macOS, make sure FreeCAD exists at:
 
 ```text
 /Applications/FreeCAD.app
 ```
 
-If FreeCAD is installed elsewhere, update the paths in [config.py](config.py) and [freecad_bridge.py](freecad_bridge.py).
+On Windows, make sure FreeCAD is installed under `Program Files`, for example:
+
+```text
+C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe
+```
+
+If FreeCAD is installed elsewhere, set one or more of these in `.env`:
+
+```env
+FREECAD_HOME=/path/to/freecad
+FREECAD_CMD=/path/to/FreeCADCmd
+FREECAD_GUI=/path/to/FreeCAD
+```
+
+Use Windows-style paths on Windows, for example:
+
+```env
+FREECAD_HOME='C:\Program Files\FreeCAD 1.1'
+FREECAD_CMD='C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe'
+FREECAD_GUI='C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe'
+```
 
 ### Port 5000 Is In Use
 
@@ -488,7 +560,7 @@ Good contribution areas:
 - Make model revision workflows more reliable
 - Improve technical drawing and parametric sketch quality
 - Improve FreeCAD GUI refresh, centering, and visibility behavior
-- Add Windows and Linux FreeCAD path support
+- Broaden Windows installer detection and add Linux FreeCAD path support
 - Add tests for chat history, code extraction, sanitization, and FreeCAD execution
 - Add screenshots, demo GIFs, or sample generated models
 

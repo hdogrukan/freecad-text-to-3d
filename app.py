@@ -8,6 +8,7 @@ Flask Backend
 
 import os
 import re
+import tempfile
 import threading
 import time
 import uuid
@@ -25,7 +26,7 @@ app.secret_key = os.urandom(24)
 
 # Store Flask sessions server-side.
 app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_FILE_DIR"] = "/tmp/freecad_sessions"
+app.config["SESSION_FILE_DIR"] = os.path.join(tempfile.gettempdir(), "freecad_sessions")
 app.config["SESSION_PERMANENT"] = False
 os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
 Session(app)
@@ -132,6 +133,7 @@ def index():
     return render_template(
         "index.html",
         freecad_ok=FREECAD_AVAILABLE,
+        freecad_path=config.FREECAD_APP_PATH or config.FREECAD_PATH or config.FREECAD_GUI,
         model=settings["model"],
         has_api_key=settings["has_api_key"],
     )
@@ -321,7 +323,10 @@ def api_status():
     settings = current_openai_settings()
     return jsonify({
         "freecad_installed": FREECAD_AVAILABLE,
-        "freecad_path":      "/Applications/FreeCAD.app",
+        "freecad_platform":  config.PLATFORM,
+        "freecad_path":      config.FREECAD_APP_PATH,
+        "freecad_cmd_path":  config.FREECAD_PATH,
+        "freecad_gui_path":  config.FREECAD_GUI,
         "model":             settings["model"],
         "openai":            settings,
         "output_dir":        config.OUTPUT_DIR,
@@ -418,10 +423,14 @@ if __name__ == "__main__":
     print("═" * 55)
     
     if not FREECAD_AVAILABLE:
-        print("  !  FreeCAD not found: /Applications/FreeCAD.app")
+        print(f"  !  FreeCAD not found for platform: {config.PLATFORM}")
+        print(f"  -> Checked FreeCADCmd: {config.FREECAD_PATH or 'not resolved'}")
+        print(f"  -> Checked FreeCAD GUI: {config.FREECAD_GUI or 'not resolved'}")
         print("  -> Download it from https://www.freecad.org")
     else:
         print("  ✓  FreeCAD detected")
+        print("  FreeCADCmd:", config.FREECAD_PATH or "not resolved")
+        print("  FreeCAD GUI:", config.FREECAD_GUI or "not resolved")
     
     print("  OpenAI Model:", config.OPENAI_MODEL)
     print("═" * 55 + "\n")

@@ -3,7 +3,7 @@ FreeCAD Bridge
 - Launches FreeCAD as a subprocess
 - Writes generated Python code to a temporary .py file
 - Runs the file with FreeCADCmd
-- Supports macOS /Applications/FreeCAD.app by default
+- Supports macOS and Windows FreeCAD paths by default
 """
 
 import ast
@@ -16,16 +16,12 @@ import time
 from config import Config
 from app_logger import EventLogger
 
-# Init code that can be prepended to FreeCAD Python scripts when needed.
-FREECAD_INIT = """
-import sys
-sys.path.insert(0, "/Applications/FreeCAD.app/Contents/Resources/lib/python3.x/site-packages")
-"""
-
 class FreeCADBridge:
     def __init__(self, config: Config):
         self.config      = config
         self.output_dir  = config.OUTPUT_DIR
+        self.platform    = config.PLATFORM
+        self.freecad_app = config.FREECAD_APP_PATH
         self.freecad_cmd = config.FREECAD_PATH
         self.freecad_gui = config.FREECAD_GUI
         self.fc_process  = None
@@ -45,22 +41,34 @@ class FreeCADBridge:
 
     def launch_freecad(self) -> tuple[bool, str]:
         """Launch the FreeCAD GUI."""
-        # macOS
-        app_path = "/Applications/FreeCAD.app"
-        
-        if os.path.exists(app_path):
-            try:
+        try:
+            if self.platform == "Darwin" and self.freecad_app and os.path.exists(self.freecad_app):
+                command = ["open", "-a", "FreeCAD"]
+                if os.path.abspath(self.freecad_app) != "/Applications/FreeCAD.app":
+                    command = ["open", self.freecad_app]
                 self.fc_process = subprocess.Popen(
-                    ["open", "-a", "FreeCAD"],
+                    command,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
                 time.sleep(3)
                 return True, "FreeCAD launched"
-            except Exception as e:
-                return False, f"FreeCAD could not be launched: {e}"
-        else:
-            return False, f"FreeCAD not found: {app_path}"
+
+            if self.freecad_gui and os.path.exists(self.freecad_gui):
+                self.fc_process = subprocess.Popen(
+                    [self.freecad_gui],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                time.sleep(3)
+                return True, "FreeCAD launched"
+
+            return False, (
+                "FreeCAD GUI not found. Configure FREECAD_GUI or install FreeCAD. "
+                f"Current path: {self.freecad_gui or 'not resolved'}"
+            )
+        except Exception as e:
+            return False, f"FreeCAD could not be launched: {e}"
 
     def run_code(self, python_code: str) -> tuple[bool, str]:
         """
@@ -431,7 +439,10 @@ except Exception as e:
             except Exception as e:
                 return False, str(e)
         else:
-            return False, "FreeCAD installation not found. Check /Applications/FreeCAD.app."
+            return False, (
+                "FreeCAD installation not found. Configure FREECAD_CMD/FREECAD_PATH "
+                f"or FREECAD_GUI. Current FreeCADCmd path: {freecadcmd or 'not resolved'}"
+            )
 
     def _extract_model_error(self, output: str) -> str:
         err = output.split("MODEL_ERROR:")[-1].split("\n")[0].strip()
@@ -480,7 +491,10 @@ except Exception as e:
     def sync_active_document(self) -> tuple[bool, str, dict]:
         """Ask the GUI bridge to summarize and save-copy the active FreeCAD document."""
         if not os.path.exists(self.freecad_gui):
-            return False, "FreeCAD GUI not found. Check /Applications/FreeCAD.app.", {}
+            return False, (
+                "FreeCAD GUI not found. Configure FREECAD_GUI or install FreeCAD. "
+                f"Current path: {self.freecad_gui or 'not resolved'}"
+            ), {}
 
         stale_state = self._read_json_file(self._gui_state_path)
         if not self._gui_bridge_is_active() and not stale_state.get("last_document"):
@@ -773,7 +787,11 @@ QtCore.QTimer.singleShot(0, poll_commands)
         )
 
     def check_freecad_installed(self) -> bool:
-        return os.path.exists("/Applications/FreeCAD.app")
+        return bool(
+            (self.freecad_cmd and os.path.exists(self.freecad_cmd))
+            or (self.freecad_gui and os.path.exists(self.freecad_gui))
+            or (self.freecad_app and os.path.exists(self.freecad_app))
+        )
     
     def get_output_path(self) -> str:
         return self._latest_model_path

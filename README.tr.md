@@ -4,10 +4,11 @@
 
 OpenAI, Flask ve FreeCADCmd kullanarak doğal dil komutlarından FreeCAD 3D modelleri oluşturan yerel web uygulaması.
 
-Uygulama şu anda macOS odaklıdır ve FreeCAD'in varsayılan olarak şu konumda olmasını bekler:
+Uygulama macOS ve Windows destekler. Varsayılan FreeCAD keşfi şu yaygın kurulum konumlarını kontrol eder:
 
 ```text
-/Applications/FreeCAD.app
+macOS:   /Applications/FreeCAD.app
+Windows: C:\Program Files\FreeCAD*\bin\FreeCADCmd.exe
 ```
 
 ## Özellikler
@@ -51,17 +52,17 @@ FreeCAD GUI bridge
 
 ## Gereksinimler
 
-- macOS
-- Python 3.9+
+- macOS veya Windows
+- Python 3.10+
 - FreeCAD
 - OpenAI API anahtarı
 - İnternet bağlantısı
 
-Windows ve Linux desteği henüz tam bağlanmadı. Farklı işletim sistemleri veya özel FreeCAD kurulumu için [config.py](config.py) ve [freecad_bridge.py](freecad_bridge.py) içindeki FreeCAD yollarının güncellenmesi gerekir.
+Özel FreeCAD kurulumları için `.env` veya shell üzerinden `FREECAD_HOME`, `FREECAD_CMD`, `FREECAD_GUI` ya da `FREECAD_PYTHON` ayarlanabilir.
 
 ## FreeCAD Uyumluluğu
 
-Bu proje macOS üzerinde FreeCAD `1.1.1` ile doğrulandı.
+Bu proje macOS üzerinde FreeCAD `1.1.1` ile doğrulandı. Windows desteği standart `C:\Program Files\FreeCAD...\bin` klasör yapısı için bağlandı.
 
 Yerel test kurulumunda görülen bilgiler:
 
@@ -97,6 +98,13 @@ macOS'te `FreeCAD.app` dosyasını `Applications` klasörüne taşıyın. Şu yo
 ls /Applications/FreeCAD.app
 ```
 
+Windows'ta FreeCAD'i varsayılan `Program Files` konumuna kurun ve şu dosyalardan birinin var olduğunu doğrulayın:
+
+```text
+C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe
+C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe
+```
+
 ### 3. OpenAI API Anahtarını Ayarlayın
 
 Geçici kullanım için terminalde ortam değişkeni verebilirsiniz:
@@ -123,7 +131,7 @@ OUTPUT_DIR=~/freecad_text_to_3d_output
 
 ## Çalıştırma
 
-### Hızlı Başlangıç
+### macOS Hızlı Başlangıç
 
 ```bash
 chmod +x start.sh
@@ -145,7 +153,16 @@ Uygulama varsayılan olarak şu adreste açılır:
 http://127.0.0.1:5000
 ```
 
-### Manuel Başlatma
+### Windows Hızlı Başlangıç
+
+Proje klasöründe PowerShell açın:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\start.ps1
+```
+
+### macOS Manuel Başlatma
 
 ```bash
 python3 -m venv venv
@@ -159,6 +176,16 @@ Sanal ortam daha önce oluşturulduysa:
 
 ```bash
 source venv/bin/activate
+python app.py
+```
+
+### Windows Manuel Başlatma
+
+```powershell
+py -3 -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python app.py
 ```
 
@@ -284,9 +311,10 @@ Ana ayarlar [config.py](config.py) dosyasındadır.
 |---|---|---|
 | `OPENAI_API_KEY` | `.env` veya ortam değişkeni | OpenAI API anahtarı |
 | `OPENAI_MODEL` | `gpt-3.5-turbo` | Kod üretimi için kullanılan model |
-| `FREECAD_PATH` | `/Applications/FreeCAD.app/Contents/Resources/bin/FreeCADCmd` | FreeCADCmd yolu |
-| `FREECAD_PYTHON` | `/Applications/FreeCAD.app/Contents/Resources/bin/python` | FreeCAD Python yolu |
-| `FREECAD_GUI` | `/Applications/FreeCAD.app/Contents/MacOS/FreeCAD` | FreeCAD GUI yolu |
+| `FREECAD_HOME` / `FREECAD_APP_DIR` / `FREECAD_ROOT` | otomatik algılanır | FreeCAD kurulum kökü |
+| `FREECAD_CMD` / `FREECAD_PATH` | otomatik algılanır | FreeCADCmd executable yolu |
+| `FREECAD_PYTHON` | otomatik algılanır | FreeCAD Python yolu |
+| `FREECAD_GUI` | otomatik algılanır | FreeCAD GUI executable yolu |
 | `FLASK_HOST` | `127.0.0.1` | Flask host değeri |
 | `FLASK_PORT` | `5000` | Flask portu |
 | `DEBUG` | `False` | Flask debug modu |
@@ -300,6 +328,18 @@ Ana ayarlar [config.py](config.py) dosyasındadır.
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-5.4
 OUTPUT_DIR=~/freecad_text_to_3d_output
+```
+
+Opsiyonel FreeCAD override değerleri:
+
+```env
+# macOS
+FREECAD_APP_DIR=/Applications/FreeCAD.app
+
+# Windows
+FREECAD_HOME='C:\Program Files\FreeCAD 1.1'
+FREECAD_CMD='C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe'
+FREECAD_GUI='C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe'
 ```
 
 ## API Uçları
@@ -351,6 +391,7 @@ freecad_text_to_3d/
 ├── openai_bridge.py
 ├── requirements.txt
 ├── start.sh
+├── start.ps1
 ├── templates/
 │   └── index.html
 ├── .env.example
@@ -370,6 +411,7 @@ Dosya rolleri:
 - [config.py](config.py): Ortam değişkenleri, FreeCAD yolları ve çıktı klasörü ayarları
 - [templates/index.html](templates/index.html): Web arayüzü
 - [start.sh](start.sh): macOS hızlı kurulum ve başlatma script'i
+- [start.ps1](start.ps1): Windows hızlı kurulum ve başlatma script'i
 
 ## Sorun Giderme
 
@@ -393,13 +435,25 @@ export OPENAI_API_KEY="sk-..."
 
 ### FreeCAD bulunamadı
 
-FreeCAD'in şu konumda olduğundan emin olun:
+macOS'te FreeCAD'in şu konumda olduğundan emin olun:
 
 ```text
 /Applications/FreeCAD.app
 ```
 
-Farklı konuma kurduysanız [config.py](config.py) ve [freecad_bridge.py](freecad_bridge.py) dosyalarındaki yolları güncelleyin.
+Windows'ta FreeCAD'in varsayılan `Program Files` konumunda olduğundan emin olun:
+
+```text
+C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe
+```
+
+Farklı konuma kurduysanız `.env` içinde şu değerlerden birini veya birkaçını ayarlayın:
+
+```env
+FREECAD_HOME='C:\Program Files\FreeCAD 1.1'
+FREECAD_CMD='C:\Program Files\FreeCAD 1.1\bin\FreeCADCmd.exe'
+FREECAD_GUI='C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe'
+```
 
 ### Port 5000 kullanımda
 
@@ -462,7 +516,7 @@ Katkı verilebilecek alanlar:
 - Mevcut model revizyon akışını daha güvenilir hale getirme
 - Teknik çizim ve parametrik sketch kalitesini artırma
 - FreeCAD GUI yenileme, ortalama ve görünürlük davranışını iyileştirme
-- Windows ve Linux FreeCAD path desteği ekleme
+- Windows kurulum algılamasını genişletme ve Linux FreeCAD path desteği ekleme
 - Chat history, kod çıkarma, sanitize ve FreeCAD çalıştırma için test ekleme
 - Ekran görüntüleri, demo GIF'leri veya örnek üretilmiş modeller ekleme
 

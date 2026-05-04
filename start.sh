@@ -3,7 +3,7 @@
 
 set -e
 
-FREECAD_APP="/Applications/FreeCAD.app"
+FREECAD_APP="${FREECAD_APP_DIR:-${FREECAD_HOME:-/Applications/FreeCAD.app}}"
 TESTED_FREECAD_VERSION="1.1.1"
 
 echo ""
@@ -19,6 +19,10 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 echo "[OK] Python: $(python3 --version)"
+if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+  echo "[ERROR] Python 3.10 or newer is required."
+  exit 1
+fi
 
 # Check FreeCAD
 if [ -d "$FREECAD_APP" ]; then
@@ -59,7 +63,7 @@ if [ -z "$OPENAI_API_KEY" ]; then
   echo ""
   echo "[WARN] OPENAI_API_KEY environment variable is not set."
   echo "   Option 1: export OPENAI_API_KEY='sk-...'"
-  echo "   Option 2: edit config.py"
+  echo "   Option 2: enter it from the web Settings panel"
   echo ""
 fi
 

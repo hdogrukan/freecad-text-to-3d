@@ -1235,6 +1235,7 @@ const I18N = {
     launchingFreeCAD: "FreeCAD başlatılıyor…",
     freecadOpening: "FreeCAD açılıyor…",
     installed: "FreeCAD kurulu",
+    freecadPath: "FreeCAD yolu",
     model: "Model",
     output: "Çıktı",
     eventLog: "Olay logu",
@@ -1308,6 +1309,7 @@ const I18N = {
     launchingFreeCAD: "Launching FreeCAD…",
     freecadOpening: "Opening FreeCAD…",
     installed: "FreeCAD installed",
+    freecadPath: "FreeCAD path",
     model: "Model",
     output: "Output",
     eventLog: "Event log",
@@ -1591,6 +1593,7 @@ async function checkStatus() {
   const res  = await fetch("/api/status");
   const data = await res.json();
   log(`${t("installed")}: ${data.freecad_installed}`, data.freecad_installed ? "success" : "warn");
+  log(`${t("freecadPath")}: ${data.freecad_path || data.freecad_cmd_path || data.freecad_gui_path || "not resolved"}`, "system");
   log(`${t("model")}: ${data.model}`, "info");
   log(`${t("output")}: ${data.output_dir}`, "system");
   log(`${t("eventLog")}: ${data.event_log_path}`, "system");
@@ -2012,7 +2015,7 @@ loadChats();
 log(t("started"), "system");
 log(`${t("model")}: {{ model }}`, "system");
 {% if not freecad_ok %}
-log(`⚠ ${t("freecadMissing")}: /Applications/FreeCAD.app`, "warn");
+log("⚠ " + t("freecadMissing") + ": " + {{ (freecad_path or "not resolved")|tojson }}, "warn");
 log(t("downloadFreeCAD"), "warn");
 {% else %}
 log(`✓ ${t("freecadReady")}`, "success");
