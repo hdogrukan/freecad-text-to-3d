@@ -71,6 +71,10 @@
     border-radius: 20px;
     padding: 3px 10px;
   }
+  .topbar-model.configured {
+    color: var(--green);
+    border-color: rgba(61,214,140,.4);
+  }
   .language-select {
     appearance: none;
     background: var(--card);
@@ -144,6 +148,118 @@
   .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--txt3); }
   .status-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .status-dot.err { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+  /* ── Settings Modal ──────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, .62);
+  }
+  .modal-backdrop.open { display: flex; }
+  .settings-modal {
+    width: min(460px, 100%);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .settings-header,
+  .settings-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-footer {
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+  }
+  .settings-title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .settings-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--txt2);
+    cursor: pointer;
+  }
+  .settings-body {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+  }
+  .field {
+    display: grid;
+    gap: 7px;
+  }
+  .field label {
+    font-size: 11px;
+    color: var(--txt2);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .field input {
+    width: 100%;
+    min-height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--card);
+    color: var(--txt);
+    padding: 7px 10px;
+    font-family: var(--sans);
+    font-size: 13px;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .settings-note {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--txt2);
+  }
+  .settings-state {
+    font-size: 12px;
+    color: var(--txt2);
+  }
+  .settings-btn {
+    min-height: 32px;
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--card);
+    color: var(--txt);
+    font-family: var(--sans);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .settings-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .settings-btn.danger {
+    color: var(--red);
+    border-color: rgba(247,92,92,.42);
+    background: rgba(247,92,92,.07);
+  }
 
   /* ── Sidebar ──────────────────────────────────────────────── */
   .sidebar {
@@ -906,12 +1022,19 @@
   <header class="topbar">
     <span class="topbar-logo">Free<span>CAD</span> Text→3D</span>
     <div class="topbar-sep"></div>
-    <span class="topbar-model">{{ model }}</span>
+    <span class="topbar-model {% if has_api_key %}configured{% endif %}" id="model-pill">{{ model }}</span>
     <select class="language-select" id="language-select" aria-label="Language">
       <option value="tr">TR</option>
       <option value="en">EN</option>
     </select>
     <div class="topbar-spacer"></div>
+    <button class="topbar-action" id="settings-toggle" onclick="openSettings()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04A1.8 1.8 0 0 0 14.8 19.6a1.8 1.8 0 0 0-1.1 1.65V21a2.1 2.1 0 0 1-4.2 0v-.06A1.8 1.8 0 0 0 8.4 19.3a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 1 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.8 14.7a1.8 1.8 0 0 0-1.65-1.1H2.1a2.1 2.1 0 0 1 0-4.2h.06A1.8 1.8 0 0 0 3.8 8.3a1.8 1.8 0 0 0-.36-1.98l-.04-.04a2.1 2.1 0 1 1 2.97-2.97l.04.04A1.8 1.8 0 0 0 8.4 3.7a1.8 1.8 0 0 0 1.1-1.65V2a2.1 2.1 0 0 1 4.2 0v.06a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.97 2.97l-.04.04A1.8 1.8 0 0 0 19.4 8.3a1.8 1.8 0 0 0 1.65 1.1h.06a2.1 2.1 0 0 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z"></path>
+      </svg>
+      <span id="settings-toggle-text">Ayarlar</span>
+    </button>
     <button class="topbar-action" id="console-toggle" onclick="toggleConsole()" aria-expanded="false" aria-controls="console-panel">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24" aria-hidden="true">
         <polyline points="4 17 10 11 4 5"></polyline>
@@ -1010,6 +1133,38 @@
 <!-- Toast container -->
 <div class="toast-container" id="toasts"></div>
 
+<!-- Settings modal -->
+<div class="modal-backdrop" id="settings-backdrop" aria-hidden="true">
+  <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="settings-header">
+      <span class="settings-title" id="settings-title">OpenAI Ayarları</span>
+      <button class="settings-close" onclick="closeSettings()" aria-label="Ayarları kapat">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-state" id="settings-state">Durum yükleniyor...</div>
+      <div class="field">
+        <label for="settings-api-key" id="settings-api-key-label">API key</label>
+        <input id="settings-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-...">
+      </div>
+      <div class="field">
+        <label for="settings-model" id="settings-model-label">Model</label>
+        <input id="settings-model" type="text" autocomplete="off" spellcheck="false" value="{{ model }}">
+      </div>
+      <p class="settings-note" id="settings-note"></p>
+    </div>
+    <div class="settings-footer">
+      <button class="settings-btn danger" id="settings-clear-btn" onclick="clearOpenAISettings()">Temizle</button>
+      <button class="settings-btn" id="settings-cancel-btn" onclick="closeSettings()">İptal</button>
+      <button class="settings-btn primary" id="settings-save-btn" onclick="saveOpenAISettings()">Kaydet</button>
+    </div>
+  </section>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let busy        = false;
@@ -1018,6 +1173,7 @@ let sessionMsgs = [];
 let currentLang = localStorage.getItem("freecadTextTo3dLang") || "tr";
 let currentChatId = localStorage.getItem("freecadTextTo3dChatId") || null;
 let generationMode = localStorage.getItem("freecadTextTo3dMode") || "model_only";
+let openAISettings = { model: "{{ model }}", has_api_key: {{ "true" if has_api_key else "false" }}, api_key_source: "{{ 'env' if has_api_key else 'missing' }}" };
 let chats = [];
 
 const I18N = {
@@ -1050,6 +1206,20 @@ const I18N = {
     syncNoDocument: "FreeCAD'de açık aktif doküman yok. Önce FreeCAD'de bir model açın veya oluşturun.",
     consoleTitle: "⚙ FreeCAD Konsol",
     consoleShort: "Konsol",
+    settingsShort: "Ayarlar",
+    settingsTitle: "OpenAI Ayarları",
+    settingsClose: "Ayarları kapat",
+    apiKeyLabel: "API key",
+    modelLabel: "Model",
+    settingsNote: "API key tarayıcıda saklanmaz ve loglara yazılmaz. Bu yerel oturum için Flask process belleğinde tutulur. Alanı boş bırakırsanız mevcut key korunur.",
+    settingsStateReady: "API key ayarlı",
+    settingsStateMissing: "API key eksik",
+    settingsStateSource: "Kaynak",
+    settingsSaved: "OpenAI ayarları kaydedildi",
+    settingsCleared: "Oturum OpenAI ayarları temizlendi",
+    settingsSave: "Kaydet",
+    settingsCancel: "İptal",
+    settingsClear: "Temizle",
     clear: "Temizle",
     closeConsole: "Konsolu kapat",
     openFreeCAD: "FreeCAD Aç",
@@ -1109,6 +1279,20 @@ const I18N = {
     syncNoDocument: "No active FreeCAD document is open. Open or create a model in FreeCAD first.",
     consoleTitle: "⚙ FreeCAD Console",
     consoleShort: "Console",
+    settingsShort: "Settings",
+    settingsTitle: "OpenAI Settings",
+    settingsClose: "Close settings",
+    apiKeyLabel: "API key",
+    modelLabel: "Model",
+    settingsNote: "The API key is not stored in the browser and is not written to logs. It is kept in Flask process memory for this local session. Leave it blank to keep the current key.",
+    settingsStateReady: "API key configured",
+    settingsStateMissing: "API key missing",
+    settingsStateSource: "Source",
+    settingsSaved: "OpenAI settings saved",
+    settingsCleared: "Session OpenAI settings cleared",
+    settingsSave: "Save",
+    settingsCancel: "Cancel",
+    settingsClear: "Clear",
     clear: "Clear",
     closeConsole: "Close console",
     openFreeCAD: "Open FreeCAD",
@@ -1292,6 +1476,86 @@ async function syncActiveFreeCAD() {
     setSyncState("error");
   } finally {
     btn.disabled = false;
+  }
+}
+
+// ── OpenAI settings ───────────────────────────────────────────────────────
+async function loadOpenAISettings() {
+  try {
+    const res = await fetch("/api/settings/openai");
+    const data = await res.json();
+    openAISettings = data.openai || openAISettings;
+    renderOpenAISettings();
+  } catch (e) {
+    log(t("connectionError") + ": " + e.message, "error");
+  }
+}
+
+function renderOpenAISettings() {
+  const model = openAISettings.model || "";
+  const hasKey = Boolean(openAISettings.has_api_key);
+  const source = openAISettings.api_key_source || "missing";
+  const modelPill = document.getElementById("model-pill");
+  modelPill.textContent = model || t("model");
+  modelPill.classList.toggle("configured", hasKey);
+  document.getElementById("settings-model").value = model;
+  document.getElementById("settings-api-key").value = "";
+  document.getElementById("settings-state").textContent =
+    `${hasKey ? t("settingsStateReady") : t("settingsStateMissing")} · ${t("settingsStateSource")}: ${source}`;
+}
+
+async function openSettings() {
+  await loadOpenAISettings();
+  const backdrop = document.getElementById("settings-backdrop");
+  backdrop.classList.add("open");
+  backdrop.setAttribute("aria-hidden", "false");
+  document.getElementById("settings-api-key").focus();
+}
+
+function closeSettings() {
+  const backdrop = document.getElementById("settings-backdrop");
+  backdrop.classList.remove("open");
+  backdrop.setAttribute("aria-hidden", "true");
+  document.getElementById("settings-api-key").value = "";
+}
+
+async function saveOpenAISettings() {
+  const apiKey = document.getElementById("settings-api-key").value.trim();
+  const model = document.getElementById("settings-model").value.trim();
+  try {
+    const res = await fetch("/api/settings/openai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: apiKey, model })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast(data.error || t("connectionError"), "err");
+      log(data.error || t("connectionError"), "error");
+      return;
+    }
+    openAISettings = data.openai || openAISettings;
+    renderOpenAISettings();
+    closeSettings();
+    toast(t("settingsSaved"), "ok");
+    log(`${t("settingsSaved")}: ${openAISettings.model}`, "system");
+  } catch (e) {
+    toast(t("connectionError"), "err");
+    log(t("connectionError") + ": " + e.message, "error");
+  }
+}
+
+async function clearOpenAISettings() {
+  try {
+    const res = await fetch("/api/settings/openai", { method: "DELETE" });
+    const data = await res.json();
+    openAISettings = data.openai || openAISettings;
+    renderOpenAISettings();
+    toast(t("settingsCleared"), "ok");
+    log(t("settingsCleared"), "system");
+  } catch (e) {
+    toast(t("connectionError"), "err");
+    log(t("connectionError") + ": " + e.message, "error");
   }
 }
 
@@ -1590,6 +1854,7 @@ function applyTranslations() {
   document.getElementById("language-select").value = currentLang;
   textarea.placeholder = t("placeholder");
   document.getElementById("console-toggle-text").textContent = t("consoleShort");
+  document.getElementById("settings-toggle-text").textContent = t("settingsShort");
 
   const statusDot = document.getElementById("status-dot");
   document.getElementById("status-text").textContent =
@@ -1624,6 +1889,15 @@ function applyTranslations() {
   }
   renderGenerationMode();
   document.querySelector(".console-title").textContent = t("consoleTitle");
+  document.getElementById("settings-title").textContent = t("settingsTitle");
+  document.querySelector(".settings-close").setAttribute("aria-label", t("settingsClose"));
+  document.getElementById("settings-api-key-label").textContent = t("apiKeyLabel");
+  document.getElementById("settings-model-label").textContent = t("modelLabel");
+  document.getElementById("settings-note").textContent = t("settingsNote");
+  document.getElementById("settings-clear-btn").textContent = t("settingsClear");
+  document.getElementById("settings-cancel-btn").textContent = t("settingsCancel");
+  document.getElementById("settings-save-btn").textContent = t("settingsSave");
+  renderOpenAISettings();
   document.querySelector(".console-clear-btn").textContent = t("clear");
   document.querySelector(".console-close-btn").setAttribute("aria-label", t("closeConsole"));
   const consoleButtons = document.querySelectorAll(".console-btn");
@@ -1733,6 +2007,7 @@ document.getElementById("language-select").addEventListener("change", e => {
 });
 
 applyTranslations();
+loadOpenAISettings();
 loadChats();
 log(t("started"), "system");
 log(`${t("model")}: {{ model }}`, "system");

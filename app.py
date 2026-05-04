@@ -7,7 +7,10 @@ Flask Backend
 """
 
 import os
+import re
 import threading
+import time
+import uuid
 from flask import Flask, render_template, request, jsonify, session
 from flask_session import Session
 
@@ -28,15 +31,18 @@ os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
 Session(app)
 
 config     = Config()
-ai_bridge  = OpenAIBridge(config)
 fc_bridge  = FreeCADBridge(config)
 chat_store = ChatStore(config.CHAT_HISTORY_PATH)
 event_log  = EventLogger(config.EVENT_LOG_PATH)
+client_config_store = {}
+client_config_lock = threading.Lock()
 
 # Check whether FreeCAD is installed.
 FREECAD_AVAILABLE = fc_bridge.check_freecad_installed()
 MAX_FREECAD_REPAIR_ATTEMPTS = 2
 GENERATION_MODES = {"model_only", "technical_drawing", "parametric_sketch"}
+MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,80}$")
+CLIENT_CONFIG_TTL_SECONDS = 8 * 60 * 60
 
 
 def is_repairable_model_error(message: str) -> bool:
@@ -57,14 +63,77 @@ def repair_note(language: str, attempts: int) -> str:
 def normalize_generation_mode(mode: str) -> str:
     return mode if mode in GENERATION_MODES else "model_only"
 
+
+def get_client_config_id() -> str:
+    config_id = session.get("client_config_id")
+    if not config_id:
+        config_id = uuid.uuid4().hex
+        session["client_config_id"] = config_id
+    return config_id
+
+
+def get_session_client_config() -> dict:
+    config_id = session.get("client_config_id")
+    if not config_id:
+        return {}
+    with client_config_lock:
+        data = dict(client_config_store.get(config_id, {}))
+        updated_at = float(data.get("updated_at") or 0)
+        if updated_at and time.time() - updated_at > CLIENT_CONFIG_TTL_SECONDS:
+            client_config_store.pop(config_id, None)
+            session.pop("client_config_id", None)
+            return {}
+        data.pop("updated_at", None)
+        return data
+
+
+def save_session_client_config(data: dict) -> None:
+    config_id = get_client_config_id()
+    with client_config_lock:
+        existing = client_config_store.get(config_id, {})
+        existing.update(data)
+        existing["updated_at"] = time.time()
+        client_config_store[config_id] = existing
+
+
+def clear_session_client_config() -> None:
+    config_id = session.pop("client_config_id", None)
+    if not config_id:
+        return
+    with client_config_lock:
+        client_config_store.pop(config_id, None)
+
+
+def current_openai_settings() -> dict:
+    overrides = get_session_client_config()
+    api_key = overrides.get("api_key") or config.OPENAI_API_KEY
+    model = overrides.get("model") or config.OPENAI_MODEL
+    return {
+        "model": model,
+        "has_api_key": bool(api_key),
+        "api_key_source": "session" if overrides.get("api_key") else ("env" if config.OPENAI_API_KEY else "missing"),
+        "model_source": "session" if overrides.get("model") else "env",
+    }
+
+
+def make_openai_bridge() -> OpenAIBridge:
+    overrides = get_session_client_config()
+    api_key = overrides.get("api_key") or config.OPENAI_API_KEY
+    model = overrides.get("model") or config.OPENAI_MODEL
+    if not api_key:
+        raise RuntimeError("OpenAI API key is missing. Add it from Settings or set OPENAI_API_KEY in .env.")
+    return OpenAIBridge(config, api_key=api_key, model=model)
+
 # API -------------------------------------------------------------------------
 
 @app.route("/")
 def index():
+    settings = current_openai_settings()
     return render_template(
         "index.html",
         freecad_ok=FREECAD_AVAILABLE,
-        model=config.OPENAI_MODEL,
+        model=settings["model"],
+        has_api_key=settings["has_api_key"],
     )
 
 
@@ -98,6 +167,7 @@ def api_chat():
 
     # 1. Get a response from OpenAI.
     try:
+        ai_bridge = make_openai_bridge()
         description, python_code = ai_bridge.chat(
             history,
             message,
@@ -151,6 +221,7 @@ def api_chat():
                 error=fc_result.get("message", ""),
             )
             try:
+                ai_bridge = make_openai_bridge()
                 repaired_description, repaired_code = ai_bridge.repair_code(
                     history,
                     message,
@@ -247,14 +318,65 @@ def api_clear_chats():
 
 @app.route("/api/status", methods=["GET"])
 def api_status():
+    settings = current_openai_settings()
     return jsonify({
         "freecad_installed": FREECAD_AVAILABLE,
         "freecad_path":      "/Applications/FreeCAD.app",
-        "model":             config.OPENAI_MODEL,
+        "model":             settings["model"],
+        "openai":            settings,
         "output_dir":        config.OUTPUT_DIR,
         "event_log_path":    config.EVENT_LOG_PATH,
         "gui_log_path":      os.path.join(config.OUTPUT_DIR, "open_latest_in_gui.log"),
     })
+
+
+@app.route("/api/settings/openai", methods=["GET"])
+def api_get_openai_settings():
+    return jsonify({"openai": current_openai_settings()})
+
+
+@app.route("/api/settings/openai", methods=["POST"])
+def api_set_openai_settings():
+    data = request.get_json(force=True)
+    api_key = str(data.get("api_key", "")).strip()
+    model = str(data.get("model", "")).strip()
+
+    if not model:
+        return jsonify({"error": "Model cannot be empty"}), 400
+    if not MODEL_NAME_RE.match(model):
+        return jsonify({"error": "Model name contains unsupported characters"}), 400
+    if api_key and not api_key.startswith(("sk-", "sess-")):
+        return jsonify({"error": "API key format does not look valid"}), 400
+
+    updates = {"model": model}
+    if api_key:
+        updates["api_key"] = api_key
+    save_session_client_config(updates)
+    settings = current_openai_settings()
+    event_log.log(
+        "info",
+        "api",
+        "openai_settings_updated",
+        "OpenAI client settings updated for this session",
+        model=settings["model"],
+        api_key_source=settings["api_key_source"],
+    )
+    return jsonify({"ok": True, "openai": settings})
+
+
+@app.route("/api/settings/openai", methods=["DELETE"])
+def api_clear_openai_settings():
+    clear_session_client_config()
+    settings = current_openai_settings()
+    event_log.log(
+        "info",
+        "api",
+        "openai_settings_cleared",
+        "OpenAI client settings cleared for this session",
+        model=settings["model"],
+        api_key_source=settings["api_key_source"],
+    )
+    return jsonify({"ok": True, "openai": settings})
 
 
 @app.route("/api/logs", methods=["GET"])

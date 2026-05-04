@@ -97,7 +97,12 @@ GENERATION_MODE_PROMPTS = {
         "then add a TechDraw page with front, top, right, and isometric views when "
         "possible. Use TechDraw APIs only, never FreeCADGui. Wrap TechDraw setup in "
         "try/except so the 3D model still succeeds if TechDraw is unavailable. Use "
-        "Helvetica or Arial for annotations; do not request a missing font named Sans."
+        "Helvetica or Arial for annotations; do not request a missing font named Sans. "
+        "For FreeCAD 1.1.x templates, prefer TechDraw.getStandardTemplate('ISO/A4_Landscape_TD.svg') "
+        "or a path based on FreeCAD.getResourceDir() + 'Mod/TechDraw/Templates/ISO/A4_Landscape_TD.svg'. "
+        "Create and assign a valid DrawSVGTemplate before adding views. If template setup "
+        "fails after creating a DrawPage, remove the page before leaving the try/except so "
+        "the document never keeps a TechDraw page without a Template."
     ),
     "parametric_sketch": (
         "Generation mode: parametric sketch. For mechanical parts, prefer a "
@@ -109,9 +114,9 @@ GENERATION_MODE_PROMPTS = {
 }
 
 class OpenAIBridge:
-    def __init__(self, config: Config):
-        self.client = OpenAI(api_key=config.OPENAI_API_KEY)
-        self.model  = config.OPENAI_MODEL
+    def __init__(self, config: Config, api_key: str | None = None, model: str | None = None):
+        self.client = OpenAI(api_key=api_key or config.OPENAI_API_KEY)
+        self.model  = model or config.OPENAI_MODEL
         self.max_completion_tokens = 8000
 
     def chat(

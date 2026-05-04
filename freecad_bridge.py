@@ -155,8 +155,16 @@ except Exception as e:
             "sendMsgToActiveView",
             "Gui.updateGui",
         )
+        has_techdraw = "TechDraw" in code
         safe_lines = []
         for line in code.splitlines():
+            line = (
+                line
+                .replace('"Sans"', '"Helvetica"')
+                .replace("'Sans'", "'Helvetica'")
+                .replace("A4_Landscape_ISO7200TD.svg", "ISO/A4_Landscape_TD.svg")
+                .replace("A4_Landscape_ISO7200.svg", "ISO/A4_Landscape_TD.svg")
+            )
             if any(fragment in line for fragment in blocked_fragments):
                 safe_lines.append("# GUI-only line removed for FreeCADCmd compatibility")
                 continue
@@ -197,12 +205,53 @@ except Exception as e:
                     f'{indent}    {sketch_name}.MapMode = {map_mode}',
                 ])
                 continue
+            template_match = re.match(
+                r'^(\s*)([A-Za-z_][A-Za-z0-9_]*)\.Template\s*=\s*TechDraw\.getStandardTemplate\((.*?)\)\s*$',
+                line,
+            )
+            if template_match:
+                indent, template_name, requested_template = template_match.groups()
+                safe_lines.extend(self._rewrite_techdraw_template_assignment(indent, template_name, requested_template))
+                continue
             rewritten_scale = self._rewrite_nonuniform_scale(line)
             if rewritten_scale:
                 safe_lines.extend(rewritten_scale)
                 continue
+            recompute_match = re.match(r"^(\s*)doc\.recompute\(\)\s*$", line)
+            if has_techdraw and recompute_match:
+                safe_lines.extend(self._techdraw_page_cleanup(recompute_match.group(1)))
             safe_lines.append(line)
         return "\n".join(safe_lines)
+
+    def _rewrite_techdraw_template_assignment(self, indent: str, template_name: str, requested_template: str) -> list[str]:
+        """Resolve TechDraw templates defensively across FreeCAD 1.1.x builds."""
+        return [
+            f"{indent}__td_template_path = ''",
+            f"{indent}for __td_template_candidate in ({requested_template}, 'ISO/A4_Landscape_TD.svg', 'A4_Landscape_TD.svg', 'ISO/A4_Landscape_blank.svg', 'A4_Landscape_blank.svg'):",
+            f"{indent}    try:",
+            f"{indent}        __td_template_path = TechDraw.getStandardTemplate(__td_template_candidate)",
+            f"{indent}    except Exception:",
+            f"{indent}        __td_template_path = ''",
+            f"{indent}    if __td_template_path:",
+            f"{indent}        break",
+            f"{indent}if not __td_template_path:",
+            f"{indent}    import os",
+            f"{indent}    __td_template_path = os.path.join(FreeCAD.getResourceDir(), 'Mod', 'TechDraw', 'Templates', 'ISO', 'A4_Landscape_TD.svg')",
+            f"{indent}{template_name}.Template = __td_template_path",
+            f"{indent}if not getattr({template_name}, 'Template', ''):",
+            f"{indent}    raise RuntimeError('TechDraw template could not be resolved')",
+        ]
+
+    def _techdraw_page_cleanup(self, indent: str) -> list[str]:
+        """Remove orphan TechDraw pages before recompute to avoid Template-not-set errors."""
+        return [
+            f"{indent}for __td_obj in list(doc.Objects):",
+            f"{indent}    try:",
+            f"{indent}        if getattr(__td_obj, 'TypeId', '') == 'TechDraw::DrawPage' and not getattr(__td_obj, 'Template', None):",
+            f"{indent}            doc.removeObject(__td_obj.Name)",
+            f"{indent}    except Exception:",
+            f"{indent}        pass",
+        ]
 
     def _rewrite_nonuniform_scale(self, line: str):
         """Rewrite unsupported FreeCAD Shape.scale(x, y, z) calls."""
