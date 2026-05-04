@@ -4,6 +4,7 @@ venv/
 __pycache__/
 *.py[cod]
 .DS_Store
+VIDEO_DEMO_SCRIPT.md
 
 # Local FreeCAD output, if someone points OUTPUT_DIR into the repo.
 freecad_text_to_3d_output/
