@@ -38,6 +38,9 @@ class FreeCADBridge:
         self._latest_gui_log = os.path.join(self.output_dir, "open_latest_in_gui.log")
         self._gui_command_path = os.path.join(self.output_dir, "gui_command.json")
         self._gui_state_path = os.path.join(self.output_dir, "gui_state.json")
+        self._manual_context_path = os.path.join(self.output_dir, "active_freecad_context.json")
+        self._manual_model_path = os.path.join(self.output_dir, "active_freecad_document.FCStd")
+        self._last_sanitized_code = ""
         self.event_log = EventLogger(config.EVENT_LOG_PATH)
 
     def launch_freecad(self) -> tuple[bool, str]:
@@ -86,8 +89,12 @@ class FreeCADBridge:
         # Save the script.
         script_path = os.path.join(self.output_dir, "current_model.py")
         
+        # Sanitize once so the executed code can also be stored in chat history.
+        sanitized_code = self._sanitize_code(python_code)
+        self._last_sanitized_code = sanitized_code
+
         # Wrap user code for safer FreeCAD execution.
-        safe_code = self._wrap_code(python_code)
+        safe_code = self._wrap_code(sanitized_code, sanitize=False)
         syntax_ok, syntax_msg = self._validate_python_syntax(safe_code)
         if not syntax_ok:
             return False, syntax_msg
@@ -102,9 +109,10 @@ class FreeCADBridge:
         success, msg = self._execute_via_freecadcmd(script_path)
         return success, msg
 
-    def _wrap_code(self, user_code: str) -> str:
+    def _wrap_code(self, user_code: str, sanitize: bool = True) -> str:
         """Wrap generated code in a safe try/except runner."""
-        user_code = self._sanitize_code(user_code)
+        if sanitize:
+            user_code = self._sanitize_code(user_code)
         return f"""# FreeCAD Text-to-3D - Auto-generated
 import FreeCAD
 import Part
@@ -189,8 +197,77 @@ except Exception as e:
                     f'{indent}    {sketch_name}.MapMode = {map_mode}',
                 ])
                 continue
+            rewritten_scale = self._rewrite_nonuniform_scale(line)
+            if rewritten_scale:
+                safe_lines.extend(rewritten_scale)
+                continue
             safe_lines.append(line)
         return "\n".join(safe_lines)
+
+    def _rewrite_nonuniform_scale(self, line: str):
+        """Rewrite unsupported FreeCAD Shape.scale(x, y, z) calls."""
+        match = re.match(r"^(\s*)([A-Za-z_][A-Za-z0-9_]*)\.scale\((.*)\)\s*(#.*)?$", line)
+        if not match:
+            return None
+
+        indent, shape_name, args_text, trailing_comment = match.groups()
+        args = self._split_top_level_args(args_text)
+        if len(args) != 3:
+            return None
+        if any("=" in arg for arg in args):
+            return None
+
+        suffix = f"  {trailing_comment}" if trailing_comment else ""
+        matrix_name = f"__scale_matrix_{len(args_text)}_{len(shape_name)}"
+        return [
+            f"{indent}{matrix_name} = FreeCAD.Matrix(){suffix}",
+            f"{indent}{matrix_name}.A11 = {args[0]}",
+            f"{indent}{matrix_name}.A22 = {args[1]}",
+            f"{indent}{matrix_name}.A33 = {args[2]}",
+            f"{indent}{shape_name} = {shape_name}.transformGeometry({matrix_name})",
+        ]
+
+    def _split_top_level_args(self, args_text: str) -> list[str]:
+        args = []
+        current = []
+        depth = 0
+        quote = None
+        escape = False
+
+        for char in args_text:
+            if quote:
+                current.append(char)
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == quote:
+                    quote = None
+                continue
+
+            if char in ("'", '"'):
+                quote = char
+                current.append(char)
+                continue
+
+            if char in "([{":
+                depth += 1
+                current.append(char)
+                continue
+            if char in ")]}":
+                depth -= 1
+                current.append(char)
+                continue
+            if char == "," and depth == 0:
+                args.append("".join(current).strip())
+                current = []
+                continue
+
+            current.append(char)
+
+        if current or args_text.strip():
+            args.append("".join(current).strip())
+        return args
 
     def _validate_python_syntax(self, code: str) -> tuple[bool, str]:
         try:
@@ -273,7 +350,7 @@ except Exception as e:
                     return True, "Model updated and opened in FreeCAD"
                     
                 elif "MODEL_ERROR:" in output:
-                    err = output.split("MODEL_ERROR:")[-1].split("\n")[0]
+                    err = self._extract_model_error(output)
                     self.event_log.log("error", "freecadcmd", "model_error", err)
                     return False, f"FreeCAD error: {err}"
                 else:
@@ -307,10 +384,25 @@ except Exception as e:
         else:
             return False, "FreeCAD installation not found. Check /Applications/FreeCAD.app."
 
+    def _extract_model_error(self, output: str) -> str:
+        err = output.split("MODEL_ERROR:")[-1].split("\n")[0].strip()
+        traceback_lines = re.findall(
+            r'File ".*?", line (\d+), in <module>\n\s*(.+)',
+            output,
+        )
+        if not traceback_lines:
+            return err
+
+        line_number, code_line = traceback_lines[-1]
+        code_line = code_line.strip()
+        if code_line:
+            return f"{err} (line {line_number}: {code_line})"
+        return f"{err} (line {line_number})"
+
     def _open_model_in_gui(self, fcstd_path: str) -> tuple[bool, str]:
         """Send an open-model command to the GUI bridge; launch the bridge when needed."""
         command_id = f"{time.time():.6f}"
-        self._write_gui_command(command_id, fcstd_path)
+        self._write_gui_command(command_id, fcstd_path, action="open_model")
         self.event_log.log(
             "info",
             "freecad_gui",
@@ -335,6 +427,38 @@ except Exception as e:
         if ok:
             return True, "Model updated in FreeCAD GUI"
         return False, msg
+
+    def sync_active_document(self) -> tuple[bool, str, dict]:
+        """Ask the GUI bridge to summarize and save-copy the active FreeCAD document."""
+        if not os.path.exists(self.freecad_gui):
+            return False, "FreeCAD GUI not found. Check /Applications/FreeCAD.app.", {}
+
+        stale_state = self._read_json_file(self._gui_state_path)
+        if not self._gui_bridge_is_active() and not stale_state.get("last_document"):
+            return False, "Open FreeCAD and open or create a document before syncing.", {}
+
+        command_id = f"{time.time():.6f}"
+        self._write_gui_command(
+            command_id,
+            self._latest_model_path,
+            action="sync_active_document",
+            context_path=self._manual_context_path,
+            synced_model_path=self._manual_model_path,
+        )
+        self.event_log.log(
+            "info",
+            "freecad_gui",
+            "sync_command_written",
+            "FreeCAD active-document sync command written",
+            command_id=command_id,
+        )
+
+        if not self._gui_bridge_is_active():
+            self._launch_gui_bridge(self._latest_model_path)
+
+        ok, msg = self._wait_for_gui_sync(command_id, timeout=20)
+        context = self.get_manual_context()
+        return ok, msg, context if ok else {}
 
     def _launch_gui_bridge(self, fcstd_path: str) -> None:
         gui_script = f'''# FreeCAD Text-to-3D - persistent GUI bridge script
@@ -435,6 +559,48 @@ def fit_view(gui_doc):
     except Exception:
         pass
 
+def object_summary(obj, gui_doc):
+    data = {{
+        "name": obj.Name,
+        "label": getattr(obj, "Label", ""),
+        "type_id": getattr(obj, "TypeId", ""),
+    }}
+    try:
+        placement = obj.Placement
+        data["placement"] = {{
+            "base": [placement.Base.x, placement.Base.y, placement.Base.z],
+            "axis": [placement.Rotation.Axis.x, placement.Rotation.Axis.y, placement.Rotation.Axis.z],
+            "angle": placement.Rotation.Angle,
+        }}
+    except Exception:
+        pass
+    try:
+        shape = getattr(obj, "Shape", None)
+        if shape and not shape.isNull():
+            bbox = shape.BoundBox
+            data["shape_type"] = getattr(shape, "ShapeType", "")
+            data["bound_box"] = {{
+                "x_min": bbox.XMin,
+                "y_min": bbox.YMin,
+                "z_min": bbox.ZMin,
+                "x_max": bbox.XMax,
+                "y_max": bbox.YMax,
+                "z_max": bbox.ZMax,
+                "x_length": bbox.XLength,
+                "y_length": bbox.YLength,
+                "z_length": bbox.ZLength,
+            }}
+            data["volume"] = getattr(shape, "Volume", None)
+            data["area"] = getattr(shape, "Area", None)
+    except Exception:
+        pass
+    try:
+        gui_obj = gui_doc.getObject(obj.Name)
+        data["visible"] = bool(gui_obj.Visibility)
+    except Exception:
+        pass
+    return data
+
 try:
     from PySide import QtCore
 except Exception:
@@ -480,13 +646,52 @@ def open_model(command_id, model_path):
         update_state(status="error", last_command_id=command_id, last_model_path=model_path, error=traceback.format_exc())
         event("error", "open_failed", "FreeCAD GUI could not open the model", command_id=command_id, model_path=model_path, traceback=traceback.format_exc())
 
+def sync_active_document(command_id, context_path, synced_model_path):
+    event("info", "sync_received", "Active FreeCAD document sync command received", command_id=command_id)
+    try:
+        doc = FreeCAD.ActiveDocument
+        if doc is None:
+            raise RuntimeError("No active FreeCAD document is open")
+
+        gui_doc = FreeCADGui.getDocument(doc.Name)
+        doc.recompute()
+        try:
+            doc.saveCopy(synced_model_path)
+        except Exception:
+            doc.saveAs(synced_model_path)
+
+        context = {{
+            "document": doc.Name,
+            "label": getattr(doc, "Label", ""),
+            "synced_model_path": synced_model_path,
+            "object_count": len(doc.Objects),
+            "objects": [object_summary(obj, gui_doc) for obj in doc.Objects],
+        }}
+        write_json(context_path, context)
+        update_state(
+            status="ok",
+            last_sync_command_id=command_id,
+            manual_context_path=context_path,
+            synced_model_path=synced_model_path,
+            synced_document=doc.Name,
+            error="",
+        )
+        event("success", "sync_done", "Active FreeCAD document synced", command_id=command_id, document=doc.Name, object_count=len(doc.Objects), context_path=context_path)
+    except Exception:
+        update_state(status="error", last_sync_command_id=command_id, error=traceback.format_exc())
+        event("error", "sync_failed", "Active FreeCAD document could not be synced", command_id=command_id, traceback=traceback.format_exc())
+
 def poll_commands():
     global last_seen_command_id
     command = read_command()
     try:
         if command and command.get("id") and command.get("id") != last_seen_command_id:
             last_seen_command_id = command.get("id")
-            open_model(command.get("id"), command.get("model_path"))
+            action = command.get("action", "open_model")
+            if action == "sync_active_document":
+                sync_active_document(command.get("id"), command.get("context_path"), command.get("synced_model_path"))
+            else:
+                open_model(command.get("id"), command.get("model_path"))
         else:
             update_state(bridge_status="idle")
     finally:
@@ -524,17 +729,31 @@ QtCore.QTimer.singleShot(0, poll_commands)
     def get_output_path(self) -> str:
         return self._latest_model_path
 
+    def get_last_sanitized_code(self) -> str:
+        return self._last_sanitized_code
+
+    def get_manual_context(self) -> dict:
+        context = self._read_json_file(self._manual_context_path)
+        if not context:
+            return {}
+        model_path = context.get("synced_model_path")
+        if model_path and not os.path.exists(model_path):
+            return {}
+        return context
+
     def _new_model_path(self) -> str:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         millis = int((time.time() % 1) * 1000)
         return os.path.join(self.output_dir, f"model_{stamp}_{millis:03d}.FCStd")
 
-    def _write_gui_command(self, command_id: str, model_path: str) -> None:
+    def _write_gui_command(self, command_id: str, model_path: str, action: str = "open_model", **extra) -> None:
         data = {
             "id": command_id,
+            "action": action,
             "model_path": model_path,
             "created_at": time.time(),
         }
+        data.update(extra)
         tmp_path = self._gui_command_path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, sort_keys=True)
@@ -585,3 +804,40 @@ QtCore.QTimer.singleShot(0, poll_commands)
             last_state=last_state,
         )
         return False, "FreeCAD GUI update could not be verified. Check the Logs section in the console."
+
+    def _wait_for_gui_sync(self, command_id: str, timeout: int = 20) -> tuple[bool, str]:
+        deadline = time.time() + timeout
+        last_state = {}
+        while time.time() < deadline:
+            last_state = self._read_json_file(self._gui_state_path)
+            if last_state.get("last_sync_command_id") == command_id:
+                if last_state.get("status") == "ok" and not last_state.get("error"):
+                    self.event_log.log(
+                        "success",
+                        "freecad_gui",
+                        "sync_applied",
+                        "Active FreeCAD document sync applied",
+                        command_id=command_id,
+                        context_path=last_state.get("manual_context_path"),
+                    )
+                    return True, "Active FreeCAD document synced"
+                if last_state.get("status") == "error":
+                    error = last_state.get("error") or "Active FreeCAD document sync failed"
+                    self.event_log.log("error", "freecad_gui", "sync_failed", error, command_id=command_id)
+                    return False, self._friendly_sync_error(error)
+            time.sleep(0.25)
+
+        self.event_log.log(
+            "error",
+            "freecad_gui",
+            "sync_timeout",
+            "Active FreeCAD document sync timed out",
+            command_id=command_id,
+            last_state=last_state,
+        )
+        return False, "Active FreeCAD document sync could not be verified. Check the Logs section."
+
+    def _friendly_sync_error(self, error: str) -> str:
+        if "No active FreeCAD document is open" in error:
+            return "No active FreeCAD document is open. Open or create a model in FreeCAD, then click Sync Active FreeCAD again."
+        return "Active FreeCAD document could not be synced. Check the Logs section for details."

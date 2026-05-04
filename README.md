@@ -1,351 +1,8 @@
 # FreeCAD Text-to-3D
 
-Create FreeCAD 3D models from natural-language prompts using OpenAI, Flask, and FreeCADCmd.
+OpenAI, Flask ve FreeCADCmd kullanarak doğal dil komutlarından FreeCAD 3D modelleri oluşturan yerel web uygulaması.
 
-This project currently targets macOS and expects FreeCAD at:
-
-```text
-/Applications/FreeCAD.app
-```
-
-## Features
-
-- Natural-language model generation in Turkish or English
-- OpenAI-powered FreeCAD Python code generation
-- Flask web UI with language selection
-- Persistent local chat history
-- Continue previous chats and revise existing models
-- FreeCADCmd execution with `.FCStd` output
-- FreeCAD GUI bridge for opening, styling, centering, and refreshing generated models
-- Event logs for API, OpenAI, FreeCADCmd, and FreeCAD GUI steps
-
-## Architecture
-
-```text
-Browser UI
-    <-> Flask API
-Flask Backend
-    <-> OpenAI API
-OpenAI Model
-    -> FreeCAD Python code
-Flask Backend
-    <-> FreeCADCmd
-FreeCADCmd
-    -> .FCStd model file
-FreeCAD GUI Bridge
-    -> Opens and refreshes the generated model
-```
-
-## Requirements
-
-- macOS
-- Python 3.9+
-- FreeCAD
-- OpenAI API key
-- Internet connection
-
-Windows and Linux are not fully wired yet. To add support, update the FreeCAD paths in [config.py](config.py) and [freecad_bridge.py](freecad_bridge.py).
-
-## FreeCAD Compatibility
-
-This project is validated with FreeCAD `1.1.1` on macOS.
-
-The local test installation reports:
-
-```text
-CFBundleVersion: 1.1.1
-FreeCADCmd log: FreeCAD 1.1.1, Libs: 1.1.1R20260414
-```
-
-Older or newer FreeCAD versions may work, but the default paths and GUI bridge behavior are currently tested against FreeCAD `1.1.1`.
-
-## Installation
-
-### 1. Clone The Repository
-
-```bash
-git clone https://github.com/your-username/freecad-text-to-3d.git
-cd freecad-text-to-3d
-```
-
-If you downloaded a ZIP, extract it and open the project folder in your terminal.
-
-### 2. Install FreeCAD
-
-Download FreeCAD from the official website:
-
-```text
-https://www.freecad.org/downloads.php
-```
-
-On macOS, move `FreeCAD.app` into the `Applications` folder. Verify that this path exists:
-
-```bash
-ls /Applications/FreeCAD.app
-```
-
-### 3. Configure Your OpenAI API Key
-
-You can export the key in your terminal:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-For persistent local configuration, create a `.env` file:
-
-```bash
-cp .env.example .env
-```
-
-Then edit `.env`:
-
-```env
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5.4
-OUTPUT_DIR=~/freecad_text_to_3d_output
-```
-
-Do not commit `.env`. It is already ignored by [.gitignore](.gitignore).
-
-### 4. Quick Start
-
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-The script checks Python and FreeCAD, creates `venv`, installs dependencies, and starts the app at:
-
-```text
-http://127.0.0.1:5000
-```
-
-### 5. Manual Start
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-python app.py
-```
-
-Then open:
-
-```text
-http://127.0.0.1:5000
-```
-
-If you already created the virtual environment, use:
-
-```bash
-source venv/bin/activate
-python app.py
-```
-
-## Usage
-
-1. Start the Flask app.
-2. Open `http://127.0.0.1:5000`.
-3. Select `TR` or `EN` in the top bar.
-4. Type a model request in the chat box.
-5. Continue the same chat to revise the current model.
-6. Use the sidebar to reopen previous local chats.
-7. Use `Clear History` to delete local chat history.
-8. Use `Console > Logs` to inspect API/OpenAI/FreeCAD events.
-
-Example prompts:
-
-```text
-An open rectangular box sized 10x10x5 cm
-A hollow cylinder with 5 cm diameter, 10 cm height, and 2 mm wall thickness
-A cone with 2 cm top diameter, 4 cm bottom diameter, and 8 cm height
-Draw a car
-Make the car convertible
-```
-
-## Output Files
-
-Generated files are stored in:
-
-```text
-~/freecad_text_to_3d_output
-```
-
-Important files:
-
-```text
-latest.FCStd
-current_model.py
-chat_history.json
-events.jsonl
-open_latest_in_gui.log
-gui_command.json
-gui_state.json
-```
-
-`latest.FCStd` is the latest generated model. Timestamped `model_*.FCStd` files are also created to avoid FreeCAD GUI caching issues.
-
-## Configuration
-
-Main settings live in [config.py](config.py).
-
-| Setting | Default | Description |
-|---|---:|---|
-| `OPENAI_API_KEY` | `.env` or environment variable | OpenAI API key |
-| `OPENAI_MODEL` | `gpt-3.5-turbo` | Model used for code generation |
-| `FREECAD_PATH` | `/Applications/FreeCAD.app/Contents/Resources/bin/FreeCADCmd` | FreeCADCmd path |
-| `FREECAD_PYTHON` | `/Applications/FreeCAD.app/Contents/Resources/bin/python` | FreeCAD Python path |
-| `FREECAD_GUI` | `/Applications/FreeCAD.app/Contents/MacOS/FreeCAD` | FreeCAD GUI path |
-| `FLASK_HOST` | `127.0.0.1` | Flask host |
-| `FLASK_PORT` | `5000` | Flask port |
-| `OUTPUT_DIR` | `~/freecad_text_to_3d_output` | Local output, logs, and chat history folder |
-
-## Project Structure
-
-```text
-freecad-text-to-3d/
-├── app.py
-├── app_logger.py
-├── chat_store.py
-├── config.py
-├── freecad_bridge.py
-├── openai_bridge.py
-├── requirements.txt
-├── start.sh
-├── templates/
-│   └── index.html
-├── .env.example
-├── .gitignore
-├── LICENSE
-└── README.md
-```
-
-## Troubleshooting
-
-### `ModuleNotFoundError: No module named 'flask'`
-
-Activate the virtual environment first:
-
-```bash
-source venv/bin/activate
-python app.py
-```
-
-### `OPENAI_API_KEY` is missing
-
-Create `.env` or export the variable:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-### FreeCAD Is Not Found
-
-Make sure FreeCAD exists at:
-
-```text
-/Applications/FreeCAD.app
-```
-
-If you installed it elsewhere, update [config.py](config.py) and [freecad_bridge.py](freecad_bridge.py).
-
-### Port 5000 Is In Use
-
-Change `FLASK_PORT` in [config.py](config.py), for example:
-
-```python
-FLASK_PORT = 5001
-```
-
-### FreeCAD GUI Does Not Refresh
-
-Open the web console and click `Logs`. Also inspect:
-
-```text
-~/freecad_text_to_3d_output/events.jsonl
-~/freecad_text_to_3d_output/open_latest_in_gui.log
-~/freecad_text_to_3d_output/gui_state.json
-```
-
-Close all FreeCAD windows and restart the Flask app if an old GUI bridge is still running.
-
-## Contributing
-
-Contributions are welcome.
-
-This project is still evolving around FreeCAD automation, model revision workflows, prompt quality, UI responsiveness, logging, and cross-platform support.
-
-Good areas to contribute:
-
-- Improve FreeCAD model generation prompts
-- Make existing-model revision workflows more reliable
-- Improve FreeCAD GUI refresh, centering, and visibility handling
-- Add Windows and Linux FreeCAD path support
-- Improve the responsive web UI
-- Add tests for chat history, code extraction, and FreeCAD execution
-- Improve documentation, installation guides, and example prompts
-- Add screenshots, demo GIFs, or sample generated models
-
-### Development Setup
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
-Then open:
-
-```text
-http://127.0.0.1:5000
-```
-
-### Good First Issues
-
-Good first contributions include:
-
-- Add more example prompts
-- Improve README wording
-- Add screenshots or demo GIFs
-- Improve error messages
-- Add small UI polish
-- Add tests for chat history
-
-### Pull Request Checklist
-
-Before opening a PR, please check:
-
-- The app starts with `python app.py`
-- No API keys, `.env` files, logs, or generated `.FCStd` files are committed
-- README or docs are updated if behavior changes
-- FreeCAD-related changes are tested with FreeCAD when possible
-- The UI still works on desktop and mobile widths
-
-## Before Publishing Publicly
-
-Check these before pushing to GitHub:
-
-- Do not commit `.env`.
-- Do not commit `venv/`.
-- Do not commit `__pycache__/`.
-- Do not commit generated `.FCStd` files.
-- Do not paste your OpenAI API key into README, source code, issues, commits, or logs.
-- If your API key was exposed in logs, rotate it in the OpenAI dashboard.
-
-## License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
-
----
-
-# FreeCAD Text-to-3D
-
-OpenAI, Flask ve FreeCADCmd kullanarak doğal dil komutlarından FreeCAD 3D modelleri oluşturan web uygulaması.
-
-Bu proje şu anda macOS hedeflidir ve FreeCAD'in şu konumda olmasını bekler:
+Uygulama şu anda macOS odaklıdır ve FreeCAD'in varsayılan olarak şu konumda olmasını bekler:
 
 ```text
 /Applications/FreeCAD.app
@@ -353,30 +10,40 @@ Bu proje şu anda macOS hedeflidir ve FreeCAD'in şu konumda olmasını bekler:
 
 ## Özellikler
 
-- Türkçe veya İngilizce doğal dil ile model üretimi
-- OpenAI ile FreeCAD Python kodu üretimi
-- Dil seçimi olan Flask web arayüzü
-- Kalıcı local chat geçmişi
-- Eski chatlere dönüp mevcut modeli revize etme
-- FreeCADCmd ile `.FCStd` çıktısı üretme
-- Oluşturulan modeli açan, renklendiren, ortalayan ve yenileyen FreeCAD GUI bridge
-- API, OpenAI, FreeCADCmd ve FreeCAD GUI adımları için olay logları
+- Türkçe veya İngilizce doğal dil ile 3D model üretimi
+- OpenAI ile FreeCAD Python API kodu üretimi
+- Flask tabanlı yerel web arayüzü
+- Dil seçimi: `TR` ve `EN`
+- Üretim modları:
+  - `3D`: yalnızca 3D model
+  - `3D + Teknik`: 3D model ile birlikte mümkün olduğunda TechDraw teknik çizim sayfası
+  - `Sketch`: parametrik sketch / PartDesign odaklı üretim
+- Aynı chat içinde önceki modeli koruyarak revizyon yapma
+- Yerel ve kalıcı chat geçmişi
+- Eski chatleri sol panelden tekrar açma
+- FreeCADCmd ile `.FCStd` model dosyası üretme
+- Zaman damgalı model dosyaları ve `latest.FCStd` alias dosyası
+- FreeCAD GUI bridge ile modeli otomatik açma, yenileme, ortalama ve temel renklendirme
+- FreeCAD'de elle yapılan değişiklikleri `Aktif FreeCAD'i Al` ile uygulama bağlamına senkronize etme
+- OpenAI çıktısı eksik veya hatalıysa otomatik kod doğrulama ve en fazla 2 onarım denemesi
+- FreeCADCmd için GUI-only satırları temizleme ve bazı FreeCAD 1.1.x uyumluluk düzeltmeleri
+- API, OpenAI, FreeCADCmd ve FreeCAD GUI olayları için log paneli
 
 ## Mimari
 
 ```text
-Tarayıcı Arayüzü
+Tarayıcı arayüzü
     <-> Flask API
-Flask Backend
+Flask backend
     <-> OpenAI API
-OpenAI Model
+OpenAI modeli
     -> FreeCAD Python kodu
-Flask Backend
+Flask backend
     <-> FreeCADCmd
 FreeCADCmd
     -> .FCStd model dosyası
-FreeCAD GUI Bridge
-    -> Üretilen modeli açar ve yeniler
+FreeCAD GUI bridge
+    -> modeli FreeCAD GUI içinde açar, yeniler ve senkronize eder
 ```
 
 ## Gereksinimler
@@ -387,31 +54,31 @@ FreeCAD GUI Bridge
 - OpenAI API anahtarı
 - İnternet bağlantısı
 
-Windows ve Linux desteği henüz tam bağlanmadı. Destek eklemek için [config.py](config.py) ve [freecad_bridge.py](freecad_bridge.py) içindeki FreeCAD yollarını güncelleyin.
+Windows ve Linux desteği henüz tam bağlanmadı. Farklı işletim sistemleri veya özel FreeCAD kurulumu için [config.py](config.py) ve [freecad_bridge.py](freecad_bridge.py) içindeki FreeCAD yollarının güncellenmesi gerekir.
 
 ## FreeCAD Uyumluluğu
 
 Bu proje macOS üzerinde FreeCAD `1.1.1` ile doğrulandı.
 
-Local test kurulumunda görülen bilgiler:
+Yerel test kurulumunda görülen bilgiler:
 
 ```text
 CFBundleVersion: 1.1.1
 FreeCADCmd log: FreeCAD 1.1.1, Libs: 1.1.1R20260414
 ```
 
-Daha eski veya daha yeni FreeCAD sürümleri çalışabilir, ancak varsayılan yollar ve GUI bridge davranışı şu anda FreeCAD `1.1.1` ile test edilmiştir.
+Daha eski veya daha yeni FreeCAD sürümleri çalışabilir, ancak varsayılan yollar ve GUI bridge davranışı şu anda FreeCAD `1.1.1` üzerinde test edilmiştir.
 
 ## Kurulum
 
-### 1. Repoyu Klonlayın
+### 1. Repoyu Hazırlayın
 
 ```bash
-git clone https://github.com/kullanici-adiniz/freecad-text-to-3d.git
+git clone https://github.com/hdogrukan/freecad-text-to-3d.git
 cd freecad-text-to-3d
 ```
 
-ZIP olarak indirdiyseniz klasörü açın ve terminalde proje klasörüne girin.
+ZIP olarak indirdiyseniz klasörü açıp terminalde proje klasörüne girin.
 
 ### 2. FreeCAD Kurun
 
@@ -429,13 +96,13 @@ ls /Applications/FreeCAD.app
 
 ### 3. OpenAI API Anahtarını Ayarlayın
 
-Terminalde ortam değişkeni olarak verebilirsiniz:
+Geçici kullanım için terminalde ortam değişkeni verebilirsiniz:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
 
-Kalıcı local kullanım için `.env` dosyası oluşturun:
+Kalıcı yerel kullanım için `.env` dosyası oluşturun:
 
 ```bash
 cp .env.example .env
@@ -449,22 +116,33 @@ OPENAI_MODEL=gpt-5.4
 OUTPUT_DIR=~/freecad_text_to_3d_output
 ```
 
-`.env` dosyasını commit etmeyin. [.gitignore](.gitignore) içinde ignore edilmiştir.
+`.env` dosyasını commit etmeyin. Dosya [.gitignore](.gitignore) içinde ignore edilmiştir.
 
-### 4. Hızlı Başlangıç
+## Çalıştırma
+
+### Hızlı Başlangıç
 
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
 
-Bu script Python ve FreeCAD kontrolü yapar, `venv` oluşturur, bağımlılıkları kurar ve uygulamayı şu adreste başlatır:
+`start.sh` şu kontrolleri ve hazırlıkları yapar:
+
+- Python kontrolü
+- FreeCAD varlık ve sürüm kontrolü
+- `venv` oluşturma
+- Python bağımlılıklarını kurma
+- Çıktı klasörünü oluşturma
+- Flask uygulamasını başlatma
+
+Uygulama varsayılan olarak şu adreste açılır:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-### 5. Manuel Başlatma
+### Manuel Başlatma
 
 ```bash
 python3 -m venv venv
@@ -472,12 +150,6 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 python app.py
-```
-
-Sonra tarayıcıda açın:
-
-```text
-http://127.0.0.1:5000
 ```
 
 Sanal ortam daha önce oluşturulduysa:
@@ -490,13 +162,16 @@ python app.py
 ## Kullanım
 
 1. Flask uygulamasını başlatın.
-2. `http://127.0.0.1:5000` adresini açın.
+2. Tarayıcıda `http://127.0.0.1:5000` adresini açın.
 3. Üst bardan `TR` veya `EN` seçin.
-4. Chat kutusuna model isteğinizi yazın.
-5. Aynı chat içinde devam ederek mevcut modeli revize edin.
-6. Sol panelden eski local chatleri açın.
-7. `Geçmişi Temizle` ile local chat geçmişini silin.
-8. `Konsol > Loglar` ile API/OpenAI/FreeCAD olaylarını inceleyin.
+4. Üretim modunu seçin: `3D`, `3D + Teknik` veya `Sketch`.
+5. Chat kutusuna model isteğinizi yazın.
+6. Uygulama OpenAI'den FreeCAD Python kodu alır, kodu doğrular, FreeCADCmd ile çalıştırır ve modeli FreeCAD GUI içinde açar.
+7. Aynı chat içinde devam ederek mevcut modeli revize edin.
+8. Modeli FreeCAD içinde elle değiştirdiyseniz yeni revizyon istemeden önce `Aktif FreeCAD'i Al` butonuna basın.
+9. Sol panelden eski yerel chatleri açın.
+10. `Geçmişi Temizle` ile yerel chat geçmişini silin.
+11. `Konsol > Loglar` ile API, OpenAI, FreeCADCmd ve FreeCAD GUI olaylarını inceleyin.
 
 Örnek istekler:
 
@@ -506,11 +181,58 @@ python app.py
 Üstte 2 cm, altta 4 cm çaplı, 8 cm yüksekliğinde koni
 Bir araba çiz
 Arabanın üstü açık olsun
+Ön, üst ve sağ görünüşleri olan teknik çizim de ekle
+Parametrik olarak delikli bir bağlantı plakası oluştur
 ```
+
+## Üretim Modları
+
+### 3D
+
+Standart moddur. FreeCAD `Part` API, primitive solid'ler ve boolean operasyonları ile doğrudan 3D model üretir. Teknik çizim istenmedikçe TechDraw sayfası oluşturmaz.
+
+### 3D + Teknik
+
+3D modeli üretir ve mümkün olduğunda TechDraw sayfası ekler. Ön, üst, sağ ve izometrik görünüşler hedeflenir. TechDraw kurulumu hata verirse model üretiminin başarısız olmaması için çizim adımı korumalı çalıştırılır.
+
+### Sketch
+
+Mekanik parçalar için parametrik PartDesign Body, Sketcher constraint'leri, pad/pocket operasyonları ve üstte isimlendirilmiş ölçü değişkenleri tercih edilir. Dekoratif veya serbest formlu modellerde yine parametreli Part primitive yaklaşımı kullanılabilir.
+
+## Otomatik Onarım ve Kod Güvenliği
+
+Uygulama OpenAI cevabından tek bir `python` kod bloğu çıkarır ve kodun gerçekten çalıştırılabilir FreeCAD script'i olup olmadığını kontrol eder.
+
+Temel doğrulamalar:
+
+- Python syntax kontrolü
+- En az bir `doc.addObject(...)` çağrısı
+- `doc.recompute()` çağrısı
+- Eksik veya yarım FreeCAD kodunu reddetme
+
+FreeCADCmd çalıştırması hata verirse uygulama aynı bağlamı, hata mesajını ve başarısız kodu OpenAI'ye göndererek otomatik onarım ister. Varsayılan en fazla onarım denemesi: `2`.
+
+FreeCADCmd uyumluluğu için bazı satırlar otomatik temizlenir veya dönüştürülür:
+
+- `FreeCADGui`, `activeView()`, `fitAll()` gibi GUI-only çağrılar kaldırılır
+- Sketch support ve map mode atamaları daha güvenli forma çevrilir
+- FreeCAD 1.1.x ile uyumsuz `shape.scale(x, y, z)` çağrıları matrix tabanlı non-uniform scale işlemine dönüştürülür
+
+## Aktif FreeCAD Senkronizasyonu
+
+`Aktif FreeCAD'i Al` butonu, FreeCAD GUI bridge üzerinden açık aktif dokümanı okur ve uygulama bağlamına kaydeder.
+
+Senkronizasyon çıktıları:
+
+- Aktif dokümanın kopyası: `active_freecad_document.FCStd`
+- Nesne özeti: `active_freecad_context.json`
+- Nesne adları, label bilgileri, tipler, görünürlük ve bounding box bilgileri
+
+Sonraki chat isteğinde model, bu senkronize edilmiş dokümanı mevcut çizim bağlamı olarak kullanabilir. Bu akış, FreeCAD içinde elle yapılan değişikliklerden sonra yeni AI revizyonu istemek için kullanılır.
 
 ## Çıktı Dosyaları
 
-Üretilen dosyalar varsayılan olarak burada tutulur:
+Varsayılan çıktı klasörü:
 
 ```text
 ~/freecad_text_to_3d_output
@@ -518,24 +240,26 @@ Arabanın üstü açık olsun
 
 Önemli dosyalar:
 
-```text
-latest.FCStd
-current_model.py
-chat_history.json
-events.jsonl
-open_latest_in_gui.log
-gui_command.json
-gui_state.json
-```
-
-`latest.FCStd` en son üretilen modeldir. FreeCAD GUI cache sorunlarını azaltmak için zaman damgalı `model_*.FCStd` dosyaları da oluşturulur.
+| Dosya | Açıklama |
+|---|---|
+| `latest.FCStd` | En son başarılı modelin alias dosyası |
+| `model_*.FCStd` | Zaman damgalı model çıktıları |
+| `current_model.py` | Son çalıştırılan, sarılmış FreeCAD Python script'i |
+| `chat_history.json` | Yerel chat geçmişi |
+| `events.jsonl` | API, OpenAI, FreeCADCmd ve GUI olay logları |
+| `open_latest_in_gui.py` | FreeCAD GUI bridge script'i |
+| `open_latest_in_gui.log` | GUI bridge log dosyası |
+| `gui_command.json` | Flask -> GUI bridge komut dosyası |
+| `gui_state.json` | GUI bridge durum ve heartbeat dosyası |
+| `active_freecad_context.json` | Senkronize aktif FreeCAD doküman özeti |
+| `active_freecad_document.FCStd` | Senkronize aktif FreeCAD doküman kopyası |
 
 ## Yapılandırma
 
 Ana ayarlar [config.py](config.py) dosyasındadır.
 
 | Ayar | Varsayılan | Açıklama |
-|---|---:|---|
+|---|---|---|
 | `OPENAI_API_KEY` | `.env` veya ortam değişkeni | OpenAI API anahtarı |
 | `OPENAI_MODEL` | `gpt-3.5-turbo` | Kod üretimi için kullanılan model |
 | `FREECAD_PATH` | `/Applications/FreeCAD.app/Contents/Resources/bin/FreeCADCmd` | FreeCADCmd yolu |
@@ -543,12 +267,57 @@ Ana ayarlar [config.py](config.py) dosyasındadır.
 | `FREECAD_GUI` | `/Applications/FreeCAD.app/Contents/MacOS/FreeCAD` | FreeCAD GUI yolu |
 | `FLASK_HOST` | `127.0.0.1` | Flask host değeri |
 | `FLASK_PORT` | `5000` | Flask portu |
-| `OUTPUT_DIR` | `~/freecad_text_to_3d_output` | Local çıktı, log ve chat geçmişi klasörü |
+| `DEBUG` | `False` | Flask debug modu |
+| `OUTPUT_DIR` | `~/freecad_text_to_3d_output` | Yerel çıktı, log ve chat geçmişi klasörü |
+| `CHAT_HISTORY_PATH` | `OUTPUT_DIR/chat_history.json` | Chat geçmişi dosyası |
+| `EVENT_LOG_PATH` | `OUTPUT_DIR/events.jsonl` | Olay log dosyası |
+
+`.env` ile desteklenen başlıca ayarlar:
+
+```env
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5.4
+OUTPUT_DIR=~/freecad_text_to_3d_output
+```
+
+## API Uçları
+
+| Endpoint | Metot | Açıklama |
+|---|---|---|
+| `/` | `GET` | Web arayüzü |
+| `/api/chat` | `POST` | Mesajı işler, OpenAI'den kod üretir, FreeCADCmd ile modeli çalıştırır |
+| `/api/new` | `POST` | Yeni chat oluşturur |
+| `/api/chats` | `GET` | Yerel chat listesini döndürür |
+| `/api/chats/<chat_id>` | `GET` | Belirli chat detayını döndürür |
+| `/api/chats/clear` | `POST` | Yerel chat geçmişini temizler |
+| `/api/status` | `GET` | FreeCAD, model ve çıktı klasörü durumunu döndürür |
+| `/api/logs` | `GET` | Son olay loglarını döndürür |
+| `/api/launch` | `POST` | FreeCAD GUI'yi başlatır |
+| `/api/freecad/sync` | `POST` | Aktif FreeCAD dokümanını uygulama bağlamına senkronize eder |
+
+`/api/chat` örnek istek gövdesi:
+
+```json
+{
+  "message": "10x10x5 cm üstü açık kutu oluştur",
+  "language": "tr",
+  "chat_id": "optional-chat-id",
+  "generation_mode": "model_only"
+}
+```
+
+Geçerli `generation_mode` değerleri:
+
+```text
+model_only
+technical_drawing
+parametric_sketch
+```
 
 ## Proje Yapısı
 
 ```text
-freecad-text-to-3d/
+freecad_text_to_3d/
 ├── app.py
 ├── app_logger.py
 ├── chat_store.py
@@ -565,20 +334,32 @@ freecad-text-to-3d/
 └── README.md
 ```
 
+Dosya rolleri:
+
+- [app.py](app.py): Flask uygulaması ve API uçları
+- [openai_bridge.py](openai_bridge.py): OpenAI mesaj kurulumu, kod çıkarma, üretim modu promptları ve otomatik onarım
+- [freecad_bridge.py](freecad_bridge.py): FreeCADCmd çalıştırma, kod sarmalama/sanitize, GUI bridge ve aktif doküman sync
+- [chat_store.py](chat_store.py): Yerel chat geçmişi okuma/yazma
+- [app_logger.py](app_logger.py): JSONL olay logları
+- [config.py](config.py): Ortam değişkenleri, FreeCAD yolları ve çıktı klasörü ayarları
+- [templates/index.html](templates/index.html): Web arayüzü
+- [start.sh](start.sh): macOS hızlı kurulum ve başlatma script'i
+
 ## Sorun Giderme
 
 ### `ModuleNotFoundError: No module named 'flask'`
 
-Önce sanal ortamı aktif edin:
+Sanal ortamı aktif edip bağımlılıkları kurun:
 
 ```bash
 source venv/bin/activate
+pip install -r requirements.txt
 python app.py
 ```
 
 ### `OPENAI_API_KEY` eksik
 
-`.env` oluşturun veya ortam değişkeni olarak verin:
+`.env` dosyası oluşturun veya terminalde ortam değişkeni verin:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -592,7 +373,7 @@ FreeCAD'in şu konumda olduğundan emin olun:
 /Applications/FreeCAD.app
 ```
 
-Farklı bir konuma kurduysanız [config.py](config.py) ve [freecad_bridge.py](freecad_bridge.py) dosyalarını güncelleyin.
+Farklı konuma kurduysanız [config.py](config.py) ve [freecad_bridge.py](freecad_bridge.py) dosyalarındaki yolları güncelleyin.
 
 ### Port 5000 kullanımda
 
@@ -604,7 +385,7 @@ FLASK_PORT = 5001
 
 ### FreeCAD GUI yenilenmiyor
 
-Web konsolda `Loglar` butonuna basın. Ayrıca şunları inceleyin:
+Web arayüzünde `Konsol > Loglar` butonuna basın. Ayrıca şu dosyaları kontrol edin:
 
 ```text
 ~/freecad_text_to_3d_output/events.jsonl
@@ -612,26 +393,27 @@ Web konsolda `Loglar` butonuna basın. Ayrıca şunları inceleyin:
 ~/freecad_text_to_3d_output/gui_state.json
 ```
 
-Eski bir GUI bridge hâlâ çalışıyorsa tüm FreeCAD pencerelerini kapatıp Flask uygulamasını yeniden başlatın.
+Eski GUI bridge hâlâ çalışıyorsa tüm FreeCAD pencerelerini kapatıp Flask uygulamasını yeniden başlatın.
 
-## Katkı Verme
+### Aktif FreeCAD senkronizasyonu çalışmıyor
 
-Katkılara açıktır.
+Önce FreeCAD GUI içinde bir doküman açın veya oluşturun. Ardından web arayüzündeki `Aktif FreeCAD'i Al` butonuna tekrar basın.
 
-Bu proje özellikle FreeCAD otomasyonu, mevcut modeli güncelleme akışı, prompt kalitesi, responsive arayüz, log sistemi ve farklı işletim sistemi desteği tarafında geliştirilmeye uygundur.
+Loglarda şu dosyalar yardımcı olur:
 
-Katkı verilebilecek alanlar:
+```text
+~/freecad_text_to_3d_output/events.jsonl
+~/freecad_text_to_3d_output/gui_state.json
+~/freecad_text_to_3d_output/active_freecad_context.json
+```
 
-- FreeCAD model üretim promptlarını iyileştirme
-- Mevcut çizim üzerinde revizyon akışını daha güvenilir hale getirme
-- FreeCAD GUI yenileme, ortalama ve görünürlük davranışını iyileştirme
-- Windows ve Linux FreeCAD path desteği ekleme
-- Responsive web arayüzünü geliştirme
-- Chat history, kod ayıklama ve FreeCAD çalıştırma için test ekleme
-- Kurulum dokümantasyonu ve örnek promptları geliştirme
-- Ekran görüntüleri, demo GIF'leri veya örnek üretilmiş modeller ekleme
+### OpenAI kodu yarım veya hatalı döndürdü
 
-### Geliştirme Kurulumu
+Uygulama eksik kodu otomatik reddeder ve bazı FreeCAD hatalarında onarım dener. Hata devam ederse isteği daha net ve daha küçük parçalara bölün. Teknik çizim veya parametrik sketch gibi karmaşık isteklerde önce ana modeli, sonra detayları ayrı revizyon olarak istemek daha stabil sonuç verir.
+
+## Geliştirme
+
+Yerel geliştirme için:
 
 ```bash
 python3 -m venv venv
@@ -640,39 +422,28 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Sonra tarayıcıda açın:
-
-```text
-http://127.0.0.1:5000
-```
-
-### İlk Katkı İçin Uygun İşler
-
-İlk katkı için uygun işler:
-
-- Daha fazla örnek prompt ekleme
-- README metnini iyileştirme
-- Ekran görüntüsü veya demo GIF ekleme
-- Hata mesajlarını iyileştirme
-- Küçük UI düzenlemeleri yapma
-- Chat history için test ekleme
-
-### Pull Request Kontrol Listesi
-
-PR açmadan önce kontrol edin:
+PR veya yayın öncesi kontrol listesi:
 
 - Uygulama `python app.py` ile açılıyor
 - API key, `.env`, log veya üretilmiş `.FCStd` dosyaları commit edilmedi
 - Davranış değiştiyse README veya dokümantasyon güncellendi
 - FreeCAD tarafına dokunan değişiklikler mümkünse FreeCAD ile test edildi
-- UI desktop ve mobil genişliklerde çalışıyor
+- UI desktop ve mobil genişliklerde kullanılabilir durumda
+
+Katkı verilebilecek alanlar:
+
+- FreeCAD model üretim promptlarını iyileştirme
+- Mevcut model revizyon akışını daha güvenilir hale getirme
+- Teknik çizim ve parametrik sketch kalitesini artırma
+- FreeCAD GUI yenileme, ortalama ve görünürlük davranışını iyileştirme
+- Windows ve Linux FreeCAD path desteği ekleme
+- Chat history, kod çıkarma, sanitize ve FreeCAD çalıştırma için test ekleme
+- Ekran görüntüleri, demo GIF'leri veya örnek üretilmiş modeller ekleme
 
 ## Public Yayınlamadan Önce
 
-GitHub'a göndermeden önce şunları kontrol edin:
-
 - `.env` commit edilmemeli.
-- `venv/` commit edilmemeli.
+- `venv/` veya `.venv/` commit edilmemeli.
 - `__pycache__/` commit edilmemeli.
 - Üretilen `.FCStd` dosyaları commit edilmemeli.
 - OpenAI API anahtarınızı README, kaynak kod, issue, commit veya log içine yazmayın.
