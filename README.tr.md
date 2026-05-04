@@ -277,7 +277,7 @@ Senkronizasyon çıktıları:
 - Nesne özeti: `active_freecad_context.json`
 - Nesne adları, label bilgileri, tipler, görünürlük ve bounding box bilgileri
 
-Sonraki chat isteğinde model, bu senkronize edilmiş dokümanı mevcut çizim bağlamı olarak kullanabilir. Bu akış, FreeCAD içinde elle yapılan değişikliklerden sonra yeni AI revizyonu istemek için kullanılır.
+Web arayüzü yeni senkronize edilmişse sonraki chat isteği bu dokümanı mevcut çizim bağlamı olarak kullanabilir. Senkronize bağlam tek kullanımlık UI durumu gibi ele alınır; böylece eski senkronize dokümanlar ilgisiz chat'lerde yanlışlıkla tekrar kullanılmaz. Bu akış, FreeCAD içinde elle yapılan değişikliklerden sonra yeni AI revizyonu istemek için kullanılır.
 
 ## Çıktı Dosyaları
 
@@ -367,7 +367,8 @@ FREECAD_GUI='C:\Program Files\FreeCAD 1.1\bin\FreeCAD.exe'
   "message": "10x10x5 cm üstü açık kutu oluştur",
   "language": "tr",
   "chat_id": "optional-chat-id",
-  "generation_mode": "model_only"
+  "generation_mode": "model_only",
+  "use_manual_context": false
 }
 ```
 

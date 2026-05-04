@@ -1360,6 +1360,7 @@ async function sendMessage() {
   // Show the thinking indicator.
   const thinkId = showThinking();
   setInputEnabled(false);
+  const useManualContext = shouldUseSyncedContext();
 
   try {
     const res = await fetch("/api/chat", {
@@ -1369,7 +1370,8 @@ async function sendMessage() {
         message: text,
         language: currentLang,
         chat_id: currentChatId,
-        generation_mode: generationMode
+        generation_mode: generationMode,
+        use_manual_context: useManualContext
       })
     });
     const data = await res.json();
@@ -1404,6 +1406,9 @@ async function sendMessage() {
     localStorage.setItem("freecadTextTo3dChatId", currentChatId);
     document.getElementById("msg-count").textContent = msgCount;
     sessionMsgs.push(text.substring(0, 40));
+    if (useManualContext) {
+      setSyncState();
+    }
     await loadChats();
 
     if (data.python_code) {
@@ -1432,6 +1437,7 @@ async function newChat() {
   sessionMsgs = [];
   document.getElementById("msg-count").textContent = "0";
   clearLog();
+  setSyncState();
   log(t("newChatStarted"), "system");
   await loadChats();
 }
@@ -1460,7 +1466,11 @@ async function syncActiveFreeCAD() {
   setSyncState("syncing");
   btn.disabled = true;
   try {
-    const res = await fetch("/api/freecad/sync", { method: "POST" });
+    const res = await fetch("/api/freecad/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: currentChatId })
+    });
     const data = await res.json();
     if (data.success) {
       const count = data.context && data.context.object_count ? data.context.object_count : 0;
@@ -1576,6 +1586,11 @@ function setSyncState(state, count = null) {
   } else {
     btn.textContent = t("syncActiveFreeCAD");
   }
+}
+
+function shouldUseSyncedContext() {
+  const btn = document.getElementById("sync-freecad-btn");
+  return Boolean(btn && btn.classList.contains("synced"));
 }
 
 function friendlySyncMessage(message) {
@@ -1786,6 +1801,7 @@ async function loadChat(chatId) {
 
   currentChatId = chatId;
   localStorage.setItem("freecadTextTo3dChatId", currentChatId);
+  setSyncState();
   renderChat(data.chat);
   renderChatList();
 }
@@ -1822,6 +1838,7 @@ async function clearAllChats() {
   document.getElementById("msg-count").textContent = "0";
   renderChatList();
   clearLog();
+  setSyncState();
   log(t("historyCleared"), "system");
 }
 

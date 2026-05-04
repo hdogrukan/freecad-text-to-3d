@@ -13,6 +13,8 @@ import re
 import subprocess
 import os
 import time
+import zipfile
+import xml.etree.ElementTree as ET
 from config import Config
 from app_logger import EventLogger
 
@@ -221,6 +223,15 @@ except Exception as e:
                 indent, template_name, requested_template = template_match.groups()
                 safe_lines.extend(self._rewrite_techdraw_template_assignment(indent, template_name, requested_template))
                 continue
+            template_type_check_match = re.match(
+                r'^(\s*)if\s+not\s+hasattr\(([A-Za-z_][A-Za-z0-9_]*),\s*[\'"]Proxy[\'"]\)\s+'
+                r'or\s+not\s+isinstance\(\2\.Proxy,\s*TechDraw\.DrawSVGTemplate\):\s*$',
+                line,
+            )
+            if template_type_check_match:
+                indent, template_name = template_type_check_match.groups()
+                safe_lines.append(f"{indent}if isinstance({template_name}, str):")
+                continue
             rewritten_scale = self._rewrite_nonuniform_scale(line)
             if rewritten_scale:
                 safe_lines.extend(rewritten_scale)
@@ -393,6 +404,17 @@ except Exception as e:
                     fcstd_path = self._latest_model_path
                     if os.path.exists(fcstd_path) and os.path.exists(freecad_gui):
                         shutil.copy2(fcstd_path, self._latest_alias_path)
+                        model_summary = self._inspect_model_file(fcstd_path)
+                        self.event_log.log(
+                            "info",
+                            "freecad",
+                            "model_inspected",
+                            "Saved model inspected",
+                            model_path=fcstd_path,
+                            object_count=model_summary.get("object_count", 0),
+                            techdraw_page_count=len(model_summary.get("techdraw_pages", [])),
+                            techdraw_pages=model_summary.get("techdraw_pages", []),
+                        )
                         self.event_log.log(
                             "success",
                             "freecad",
@@ -404,6 +426,7 @@ except Exception as e:
                         gui_ok, gui_msg = self._open_model_in_gui(fcstd_path)
                         if not gui_ok:
                             return False, gui_msg
+                        return True, self._model_success_message(model_summary)
                     return True, "Model updated and opened in FreeCAD"
                     
                 elif "MODEL_ERROR:" in output:
@@ -458,6 +481,43 @@ except Exception as e:
         if code_line:
             return f"{err} (line {line_number}: {code_line})"
         return f"{err} (line {line_number})"
+
+    def _inspect_model_file(self, fcstd_path: str) -> dict:
+        summary = {
+            "object_count": 0,
+            "techdraw_pages": [],
+            "techdraw_views": [],
+            "techdraw_templates": [],
+        }
+        try:
+            with zipfile.ZipFile(fcstd_path) as archive:
+                document_xml = archive.read("Document.xml")
+            root = ET.fromstring(document_xml)
+        except Exception as e:
+            self.event_log.log("warn", "freecad", "model_inspect_failed", str(e), model_path=fcstd_path)
+            return summary
+
+        for obj in root.findall(".//Object"):
+            object_type = obj.get("type") or ""
+            object_name = obj.get("name") or ""
+            if not object_type:
+                continue
+            summary["object_count"] += 1
+            if object_type == "TechDraw::DrawPage":
+                summary["techdraw_pages"].append(object_name)
+            elif object_type.startswith("TechDraw::DrawView"):
+                summary["techdraw_views"].append(object_name)
+            elif object_type == "TechDraw::DrawSVGTemplate":
+                summary["techdraw_templates"].append(object_name)
+        return summary
+
+    def _model_success_message(self, model_summary: dict) -> str:
+        pages = model_summary.get("techdraw_pages", [])
+        if pages:
+            return "Model updated and opened in FreeCAD. TechDraw page: " + ", ".join(pages)
+        if "TechDraw" in self._last_sanitized_code:
+            return "Model updated and opened in FreeCAD, but no TechDraw page was saved."
+        return "Model updated and opened in FreeCAD"
 
     def _open_model_in_gui(self, fcstd_path: str) -> tuple[bool, str]:
         """Send an open-model command to the GUI bridge; launch the bridge when needed."""
@@ -683,6 +743,10 @@ def open_model(command_id, model_path):
         doc = FreeCAD.openDocument(model_path)
         FreeCAD.setActiveDocument(doc.Name)
         gui_doc = FreeCADGui.getDocument(doc.Name)
+        techdraw_pages = [
+            obj.Name for obj in doc.Objects
+            if getattr(obj, "TypeId", "") == "TechDraw::DrawPage"
+        ]
 
         for obj in doc.Objects:
             try:
@@ -693,13 +757,13 @@ def open_model(command_id, model_path):
                 pass
 
         doc.recompute()
-        event("success", "document_opened", "Current model opened in FreeCAD GUI", command_id=command_id, document=doc.Name, model_path=model_path, object_count=len(doc.Objects))
+        event("success", "document_opened", "Current model opened in FreeCAD GUI", command_id=command_id, document=doc.Name, model_path=model_path, object_count=len(doc.Objects), techdraw_pages=techdraw_pages)
 
         def complete_open():
             try:
                 fit_view(gui_doc)
-                update_state(status="ok", last_command_id=command_id, last_model_path=model_path, last_document=doc.Name, error="")
-                event("success", "script_done", "FreeCAD GUI updated the model", command_id=command_id, document=doc.Name, model_path=model_path)
+                update_state(status="ok", last_command_id=command_id, last_model_path=model_path, last_document=doc.Name, techdraw_pages=techdraw_pages, error="")
+                event("success", "script_done", "FreeCAD GUI updated the model", command_id=command_id, document=doc.Name, model_path=model_path, techdraw_pages=techdraw_pages)
             except Exception:
                 update_state(status="error", last_command_id=command_id, last_model_path=model_path, error=traceback.format_exc())
 

@@ -44,6 +44,7 @@ MAX_FREECAD_REPAIR_ATTEMPTS = 2
 GENERATION_MODES = {"model_only", "technical_drawing", "parametric_sketch"}
 MODEL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,80}$")
 CLIENT_CONFIG_TTL_SECONDS = 8 * 60 * 60
+MANUAL_CONTEXT_TTL_SECONDS = 30 * 60
 
 
 def is_repairable_model_error(message: str) -> bool:
@@ -105,6 +106,32 @@ def clear_session_client_config() -> None:
         client_config_store.pop(config_id, None)
 
 
+def mark_session_manual_context(chat_id: str | None) -> None:
+    session["manual_context_synced_at"] = time.time()
+    session["manual_context_chat_id"] = chat_id or ""
+
+
+def pop_session_manual_context(chat_id: str | None) -> dict:
+    synced_at = float(session.pop("manual_context_synced_at", 0) or 0)
+    synced_chat_id = session.pop("manual_context_chat_id", "") or ""
+    if not synced_at:
+        return {}
+    if time.time() - synced_at > MANUAL_CONTEXT_TTL_SECONDS:
+        event_log.log("warn", "api", "manual_context_expired", "Synced FreeCAD context expired", chat_id=chat_id)
+        return {}
+    if synced_chat_id and chat_id and synced_chat_id != chat_id:
+        event_log.log(
+            "warn",
+            "api",
+            "manual_context_chat_mismatch",
+            "Synced FreeCAD context belongs to a different chat",
+            chat_id=chat_id,
+            synced_chat_id=synced_chat_id,
+        )
+        return {}
+    return fc_bridge.get_manual_context()
+
+
 def current_openai_settings() -> dict:
     overrides = get_session_client_config()
     api_key = overrides.get("api_key") or config.OPENAI_API_KEY
@@ -146,7 +173,8 @@ def api_chat():
     language = data.get("language", "tr")
     generation_mode = normalize_generation_mode(data.get("generation_mode", "model_only"))
     chat_id = data.get("chat_id")
-    manual_context = fc_bridge.get_manual_context()
+    use_manual_context = bool(data.get("use_manual_context"))
+    manual_context = pop_session_manual_context(chat_id) if use_manual_context else {}
     event_log.log(
         "info",
         "api",
@@ -155,6 +183,7 @@ def api_chat():
         chat_id=chat_id,
         language=language,
         generation_mode=generation_mode,
+        use_manual_context=use_manual_context,
         manual_context=bool(manual_context),
         message_preview=message[:120],
     )
@@ -403,7 +432,11 @@ def api_launch():
 @app.route("/api/freecad/sync", methods=["POST"])
 def api_sync_active_freecad():
     """Sync the active FreeCAD GUI document into app context."""
+    data = request.get_json(silent=True) or {}
+    chat_id = data.get("chat_id")
     success, msg, context = fc_bridge.sync_active_document()
+    if success:
+        mark_session_manual_context(chat_id)
     status = 200 if success else 409
     return jsonify({
         "success": success,

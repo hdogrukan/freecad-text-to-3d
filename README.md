@@ -285,7 +285,7 @@ Sync outputs:
 - Object summary: `active_freecad_context.json`
 - Object names, labels, types, visibility, and bounding boxes
 
-The next chat request can use this synced document as the current model context. This is useful when you manually change a model in FreeCAD and want the AI to continue from that version.
+The next chat request can use this synced document as the current model context when the web UI has just synced it. The synced context is treated as one-shot UI state so old synced documents are not accidentally reused in unrelated chats. This is useful when you manually change a model in FreeCAD and want the AI to continue from that version.
 
 ## Output Files
 
@@ -375,7 +375,8 @@ Example `/api/chat` request body:
   "message": "Create a 10x10x5 cm open-top box",
   "language": "en",
   "chat_id": "optional-chat-id",
-  "generation_mode": "model_only"
+  "generation_mode": "model_only",
+  "use_manual_context": false
 }
 ```
 

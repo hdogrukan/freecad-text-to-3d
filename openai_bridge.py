@@ -100,9 +100,13 @@ GENERATION_MODE_PROMPTS = {
         "Helvetica or Arial for annotations; do not request a missing font named Sans. "
         "For FreeCAD 1.1.x templates, prefer TechDraw.getStandardTemplate('ISO/A4_Landscape_TD.svg') "
         "or a path based on FreeCAD.getResourceDir() + 'Mod/TechDraw/Templates/ISO/A4_Landscape_TD.svg'. "
-        "Create and assign a valid DrawSVGTemplate before adding views. If template setup "
+        "Create a DrawSVGTemplate object with doc.addObject('TechDraw::DrawSVGTemplate', ...), "
+        "assign its Template property to the template path string, then set page.Template to "
+        "that object before adding views. Do not call or type-check TechDraw.DrawSVGTemplate. "
+        "If template setup "
         "fails after creating a DrawPage, remove the page before leaving the try/except so "
-        "the document never keeps a TechDraw page without a Template."
+        "the document never keeps a TechDraw page without a Template. If TechDraw is skipped, "
+        "print a TECHDRAW_SKIPPED message with the exception text."
     ),
     "parametric_sketch": (
         "Generation mode: parametric sketch. For mechanical parts, prefer a "
