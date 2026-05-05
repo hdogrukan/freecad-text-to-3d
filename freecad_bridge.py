@@ -173,6 +173,11 @@ except Exception as e:
                 line
                 .replace('"Sans"', '"Helvetica"')
                 .replace("'Sans'", "'Helvetica'")
+                .replace("FreeCAD.cos", "math.cos")
+                .replace("FreeCAD.sin", "math.sin")
+                .replace("FreeCAD.tan", "math.tan")
+                .replace("FreeCAD.radians", "math.radians")
+                .replace("FreeCAD.degrees", "math.degrees")
                 .replace("A4_Landscape_ISO7200TD.svg", "ISO/A4_Landscape_TD.svg")
                 .replace("A4_Landscape_ISO7200.svg", "ISO/A4_Landscape_TD.svg")
             )
@@ -384,11 +389,12 @@ except Exception as e:
         if os.path.exists(freecadcmd):
             try:
                 self.event_log.log("info", "freecadcmd", "start", "Running FreeCADCmd", command=freecadcmd, script_path=script_path)
+                timeout_seconds = int(getattr(self.config, "FREECAD_CMD_TIMEOUT_SECONDS", 120) or 120)
                 result = subprocess.run(
                     [freecadcmd, script_path],
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=timeout_seconds
                 )
                 output = result.stdout + result.stderr
                 self.event_log.log(
@@ -441,9 +447,18 @@ except Exception as e:
                         return True, "Command completed"
                     return False, self._format_freecadcmd_failure(result.returncode, output)
                     
-            except subprocess.TimeoutExpired:
-                self.event_log.log("error", "freecadcmd", "timeout", "FreeCAD timed out")
-                return False, "FreeCAD timed out (30s)"
+            except subprocess.TimeoutExpired as e:
+                timeout_seconds = int(getattr(self.config, "FREECAD_CMD_TIMEOUT_SECONDS", 120) or 120)
+                partial_output = self._coerce_process_output(e.stdout) + self._coerce_process_output(e.stderr)
+                self.event_log.log(
+                    "error",
+                    "freecadcmd",
+                    "timeout",
+                    "FreeCAD timed out",
+                    timeout_seconds=timeout_seconds,
+                    output_tail=str(partial_output)[-1200:],
+                )
+                return False, f"FreeCAD timed out ({timeout_seconds}s)"
             except FileNotFoundError:
                 self.event_log.log("error", "freecadcmd", "not_found", f"FreeCADCmd not found: {freecadcmd}")
                 return False, f"FreeCADCmd not found: {freecadcmd}"
@@ -490,6 +505,13 @@ except Exception as e:
             "FreeCADCmd did not print an error. Check the Logs section and the generated script at "
             f"{self._current_script or 'the output directory'}."
         )
+
+    def _coerce_process_output(self, value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return str(value)
 
     def _extract_model_error(self, output: str) -> str:
         err = output.split("MODEL_ERROR:")[-1].split("\n")[0].strip()

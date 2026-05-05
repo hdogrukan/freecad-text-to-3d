@@ -45,6 +45,8 @@ RULES:
    - doc.addObject("Part::Feature","Name").Shape = shape
    - Positioning: shape.translate(FreeCAD.Vector(x, y, z))
    - Rotation: shape.rotate(center, axis, angle)
+   - Trigonometry: use math.sin, math.cos, math.radians, math.degrees.
+     Never call FreeCAD.sin, FreeCAD.cos, FreeCAD.radians, or FreeCAD.degrees.
    - Uniform scaling only: shape.scale(factor) or shape.scale(factor, center)
    - Never call shape.scale(x, y, z). FreeCAD 1.1.x rejects that signature.
      For non-uniform scaling, create a FreeCAD.Matrix(), set A11/A22/A33,
@@ -57,6 +59,11 @@ RULES:
    - End with doc.recompute().
    - The script must not stop at variable definitions or explanation-level code.
      It must contain at least one real `doc.addObject(...)` call.
+   - Keep boolean operations practical for FreeCADCmd. Avoid sequentially fusing
+     or cutting dozens of small tooth/detail solids in Python loops. For high
+     tooth counts, prefer simplified representative geometry, compounds, or a
+     visibly reduced tooth count unless the user explicitly asks for exact
+     manufacturable tooth geometry.
 
 10. Requested visual details must be clearly visible in FreeCAD:
    - When windows/glass are requested, add them as separate `Part::Feature`
@@ -205,6 +212,10 @@ class OpenAIBridge:
                 "```\n\n"
                 "Return one complete corrected FreeCAD Python script. Preserve the "
                 "requested model intent and any existing model context from the chat. "
+                "If the failure was a timeout, simplify and optimize the geometry: "
+                "reduce sequential boolean fuse/cut operations, lower decorative tooth "
+                "counts, use compounds for visual repeated details, and avoid expensive "
+                "per-tooth booleans while keeping the requested parts visually clear. "
                 "Do not explain only. Do not return a patch. Include exactly one "
                 "```python ... ``` block."
             ),

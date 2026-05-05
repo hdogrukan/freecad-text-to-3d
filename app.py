@@ -50,6 +50,7 @@ MANUAL_CONTEXT_TTL_SECONDS = 30 * 60
 def is_repairable_model_error(message: str) -> bool:
     repairable_prefixes = (
         "FreeCAD error:",
+        "FreeCAD timed out",
         "FreeCADCmd crashed",
         "FreeCADCmd failed",
         "Generated Python code is invalid",
@@ -358,6 +359,7 @@ def api_status():
         "freecad_path":      config.FREECAD_APP_PATH,
         "freecad_cmd_path":  config.FREECAD_PATH,
         "freecad_gui_path":  config.FREECAD_GUI,
+        "freecad_cmd_timeout_seconds": config.FREECAD_CMD_TIMEOUT_SECONDS,
         "model":             settings["model"],
         "openai":            settings,
         "output_dir":        config.OUTPUT_DIR,

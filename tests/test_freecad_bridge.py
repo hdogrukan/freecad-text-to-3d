@@ -7,6 +7,13 @@ from unittest.mock import Mock, patch
 from freecad_bridge import FreeCADBridge
 
 
+class TimeoutErrorProxy:
+    def __call__(self, *args, **kwargs):
+        import subprocess
+
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout"))
+
+
 def make_config(output_dir):
     return SimpleNamespace(
         OUTPUT_DIR=output_dir,
@@ -15,6 +22,7 @@ def make_config(output_dir):
         FREECAD_PATH=os.path.join(output_dir, "FreeCADCmd"),
         FREECAD_GUI=os.path.join(output_dir, "FreeCAD"),
         EVENT_LOG_PATH=os.path.join(output_dir, "events.jsonl"),
+        FREECAD_CMD_TIMEOUT_SECONDS=120,
     )
 
 
@@ -67,6 +75,36 @@ class FreeCADBridgeGuiTests(unittest.TestCase):
             self.assertIn("previously_closed = close_app_generated_documents()", script)
             self.assertIn("additionally_closed = close_app_generated_documents(except_name=doc.Name)", script)
             self.assertIn("closed_documents=closed_documents", script)
+
+    def test_freecadcmd_timeout_uses_configured_timeout(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = make_config(tmpdir)
+            config.FREECAD_CMD_TIMEOUT_SECONDS = 45
+            bridge = FreeCADBridge(config)
+            script_path = os.path.join(tmpdir, "current_model.py")
+
+            for path in (config.FREECAD_PATH, script_path):
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("placeholder")
+
+            with patch("freecad_bridge.subprocess.run", side_effect=TimeoutErrorProxy()):
+                success, message = bridge._execute_via_freecadcmd(script_path)
+
+            self.assertFalse(success)
+            self.assertEqual(message, "FreeCAD timed out (45s)")
+
+    def test_sanitizer_rewrites_freecad_trigonometry_helpers(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = FreeCADBridge(make_config(tmpdir))
+            sanitized = bridge._sanitize_code(
+                "x = FreeCAD.cos(FreeCAD.radians(45))\n"
+                "y = FreeCAD.sin(FreeCAD.degrees(1))\n"
+            )
+
+            self.assertIn("math.cos(math.radians(45))", sanitized)
+            self.assertIn("math.sin(math.degrees(1))", sanitized)
+            self.assertNotIn("FreeCAD.cos", sanitized)
+            self.assertNotIn("FreeCAD.radians", sanitized)
 
 
 if __name__ == "__main__":

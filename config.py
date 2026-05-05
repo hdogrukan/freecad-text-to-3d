@@ -23,6 +23,14 @@ def _first_existing(paths: list[str]) -> str:
     return ""
 
 
+def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, value))
+
+
 def _default_windows_freecad_home() -> str:
     roots = [
         os.environ.get("ProgramFiles", r"C:\Program Files"),
@@ -119,6 +127,7 @@ class Config:
     # Socket settings (Flask <-> FreeCAD macro communication)
     SOCKET_HOST = "127.0.0.1"
     SOCKET_PORT = 27182
+    FREECAD_CMD_TIMEOUT_SECONDS = _int_env("FREECAD_CMD_TIMEOUT_SECONDS", 120, 10, 600)
     
     # Flask
     FLASK_HOST  = "127.0.0.1"
