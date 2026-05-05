@@ -10,6 +10,7 @@ import ast
 import json
 import shutil
 import re
+import signal
 import subprocess
 import os
 import time
@@ -438,7 +439,7 @@ except Exception as e:
                     if result.returncode == 0:
                         self.event_log.log("warn", "freecadcmd", "missing_model_ok", "FreeCADCmd finished but MODEL_OK marker was not found")
                         return True, "Command completed"
-                    return False, f"Unexpected output:\n{output[:500]}"
+                    return False, self._format_freecadcmd_failure(result.returncode, output)
                     
             except subprocess.TimeoutExpired:
                 self.event_log.log("error", "freecadcmd", "timeout", "FreeCAD timed out")
@@ -466,6 +467,29 @@ except Exception as e:
                 "FreeCAD installation not found. Configure FREECAD_CMD/FREECAD_PATH "
                 f"or FREECAD_GUI. Current FreeCADCmd path: {freecadcmd or 'not resolved'}"
             )
+
+    def _format_freecadcmd_failure(self, returncode: int, output: str) -> str:
+        """Build a useful user-facing message when FreeCADCmd exits before MODEL_OK."""
+        output = (output or "").strip()
+
+        if returncode < 0:
+            signal_number = -returncode
+            try:
+                signal_name = signal.Signals(signal_number).name
+            except ValueError:
+                signal_name = f"signal {signal_number}"
+            message = f"FreeCADCmd crashed with {signal_name} ({signal_number}) before the model was saved."
+        else:
+            message = f"FreeCADCmd failed with exit code {returncode} before the model was saved."
+
+        if output:
+            return f"{message}\n\nFreeCADCmd output:\n{output[:1200]}"
+
+        return (
+            f"{message}\n\n"
+            "FreeCADCmd did not print an error. Check the Logs section and the generated script at "
+            f"{self._current_script or 'the output directory'}."
+        )
 
     def _extract_model_error(self, output: str) -> str:
         err = output.split("MODEL_ERROR:")[-1].split("\n")[0].strip()
@@ -733,12 +757,11 @@ def open_model(command_id, model_path):
     log("COMMAND_RECEIVED:" + command_id + ":" + model_path)
     event("info", "command_received", "GUI model open command received", command_id=command_id, model_path=model_path)
     try:
-        for name in list(FreeCAD.listDocuments().keys()):
-            try:
-                FreeCAD.closeDocument(name)
-                event("info", "document_closed", "Open FreeCAD document closed", document=name)
-            except Exception:
-                event("warn", "document_close_failed", "FreeCAD document could not be closed", document=name, traceback=traceback.format_exc())
+        previous_app_document = None
+        try:
+            previous_app_document = read_state().get("last_document")
+        except Exception:
+            previous_app_document = None
 
         doc = FreeCAD.openDocument(model_path)
         FreeCAD.setActiveDocument(doc.Name)
@@ -758,6 +781,14 @@ def open_model(command_id, model_path):
 
         doc.recompute()
         event("success", "document_opened", "Current model opened in FreeCAD GUI", command_id=command_id, document=doc.Name, model_path=model_path, object_count=len(doc.Objects), techdraw_pages=techdraw_pages)
+
+        if previous_app_document and previous_app_document != doc.Name:
+            try:
+                if previous_app_document in FreeCAD.listDocuments():
+                    FreeCAD.closeDocument(previous_app_document)
+                    event("info", "previous_document_closed", "Previous app-generated FreeCAD document closed", document=previous_app_document)
+            except Exception:
+                event("warn", "previous_document_close_failed", "Previous app-generated FreeCAD document could not be closed", document=previous_app_document, traceback=traceback.format_exc())
 
         def complete_open():
             try:

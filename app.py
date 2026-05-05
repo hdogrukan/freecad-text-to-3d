@@ -50,6 +50,8 @@ MANUAL_CONTEXT_TTL_SECONDS = 30 * 60
 def is_repairable_model_error(message: str) -> bool:
     repairable_prefixes = (
         "FreeCAD error:",
+        "FreeCADCmd crashed",
+        "FreeCADCmd failed",
         "Generated Python code is invalid",
         "Generated code is incomplete",
     )
