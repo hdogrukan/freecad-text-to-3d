@@ -192,6 +192,12 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
+## Usage Video
+
+Watch the project usage video before following the step-by-step flow:
+
+[![FreeCAD Text-to-3D usage video](https://img.youtube.com/vi/Q2SV5wikIUE/maxresdefault.jpg)](https://www.youtube.com/watch?v=Q2SV5wikIUE)
+
 ## Usage
 
 1. Start the Flask app.
