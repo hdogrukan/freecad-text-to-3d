@@ -424,7 +424,7 @@ except Exception as e:
                             model_path=fcstd_path,
                             latest_path=self._latest_alias_path,
                         )
-                        gui_ok, gui_msg = self._open_model_in_gui(fcstd_path)
+                        gui_ok, gui_msg = self._open_model_in_gui(self._latest_alias_path)
                         if not gui_ok:
                             return False, gui_msg
                         return True, self._model_success_message(model_summary)
@@ -621,6 +621,7 @@ log_path = {self._latest_gui_log!r}
 event_log_path = {self.config.EVENT_LOG_PATH!r}
 command_path = {self._gui_command_path!r}
 state_path = {self._gui_state_path!r}
+app_output_dir = {self.output_dir!r}
 last_seen_command_id = None
 started_at = time.time()
 
@@ -679,6 +680,42 @@ def read_command():
             return json.load(f)
     except Exception:
         return None
+
+def read_state():
+    try:
+        with open(state_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {{}}
+    except Exception:
+        return {{}}
+
+def is_app_generated_document(doc):
+    try:
+        filename = os.path.abspath(getattr(doc, "FileName", "") or "")
+        output_dir = os.path.abspath(app_output_dir)
+        basename = os.path.basename(filename)
+        if os.path.dirname(filename) == output_dir and (
+            basename == "latest.FCStd" or basename.startswith("model_")
+        ):
+            return True
+    except Exception:
+        pass
+    return False
+
+def close_app_generated_documents(except_name=None):
+    closed = []
+    for name, doc in list(FreeCAD.listDocuments().items()):
+        if except_name and name == except_name:
+            continue
+        if not is_app_generated_document(doc):
+            continue
+        try:
+            FreeCAD.closeDocument(name)
+            closed.append(name)
+            event("info", "app_document_closed", "Previous app-generated FreeCAD document closed", document=name)
+        except Exception:
+            event("warn", "app_document_close_failed", "Previous app-generated FreeCAD document could not be closed", document=name, traceback=traceback.format_exc())
+    return closed
 
 def style_object(obj, gui_obj):
     name = (obj.Name + " " + getattr(obj, "Label", "")).lower()
@@ -757,11 +794,7 @@ def open_model(command_id, model_path):
     log("COMMAND_RECEIVED:" + command_id + ":" + model_path)
     event("info", "command_received", "GUI model open command received", command_id=command_id, model_path=model_path)
     try:
-        previous_app_document = None
-        try:
-            previous_app_document = read_state().get("last_document")
-        except Exception:
-            previous_app_document = None
+        previously_closed = close_app_generated_documents()
 
         doc = FreeCAD.openDocument(model_path)
         FreeCAD.setActiveDocument(doc.Name)
@@ -781,20 +814,14 @@ def open_model(command_id, model_path):
 
         doc.recompute()
         event("success", "document_opened", "Current model opened in FreeCAD GUI", command_id=command_id, document=doc.Name, model_path=model_path, object_count=len(doc.Objects), techdraw_pages=techdraw_pages)
-
-        if previous_app_document and previous_app_document != doc.Name:
-            try:
-                if previous_app_document in FreeCAD.listDocuments():
-                    FreeCAD.closeDocument(previous_app_document)
-                    event("info", "previous_document_closed", "Previous app-generated FreeCAD document closed", document=previous_app_document)
-            except Exception:
-                event("warn", "previous_document_close_failed", "Previous app-generated FreeCAD document could not be closed", document=previous_app_document, traceback=traceback.format_exc())
+        additionally_closed = close_app_generated_documents(except_name=doc.Name)
 
         def complete_open():
             try:
                 fit_view(gui_doc)
-                update_state(status="ok", last_command_id=command_id, last_model_path=model_path, last_document=doc.Name, techdraw_pages=techdraw_pages, error="")
-                event("success", "script_done", "FreeCAD GUI updated the model", command_id=command_id, document=doc.Name, model_path=model_path, techdraw_pages=techdraw_pages)
+                closed_documents = previously_closed + additionally_closed
+                update_state(status="ok", last_command_id=command_id, last_model_path=model_path, last_document=doc.Name, techdraw_pages=techdraw_pages, closed_documents=closed_documents, error="")
+                event("success", "script_done", "FreeCAD GUI updated the model", command_id=command_id, document=doc.Name, model_path=model_path, techdraw_pages=techdraw_pages, closed_documents=closed_documents)
             except Exception:
                 update_state(status="error", last_command_id=command_id, last_model_path=model_path, error=traceback.format_exc())
 
