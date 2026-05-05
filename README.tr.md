@@ -1,5 +1,11 @@
 # FreeCAD Text-to-3D
 
+## Kullanım Videosu
+
+Proje kullanım videosunu izleyin:
+
+[![FreeCAD Text-to-3D kullanım videosu](https://img.youtube.com/vi/Q2SV5wikIUE/maxresdefault.jpg)](https://www.youtube.com/watch?v=Q2SV5wikIUE)
+
 [English README](README.md)
 
 OpenAI, Flask ve FreeCADCmd kullanarak doğal dil komutlarından FreeCAD 3D modelleri oluşturan yerel web uygulaması.
@@ -188,12 +194,6 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python app.py
 ```
-
-## Kullanım Videosu
-
-Adım adım kullanım akışına geçmeden önce proje kullanım videosunu izleyebilirsiniz:
-
-[![FreeCAD Text-to-3D kullanım videosu](https://img.youtube.com/vi/Q2SV5wikIUE/maxresdefault.jpg)](https://www.youtube.com/watch?v=Q2SV5wikIUE)
 
 ## Kullanım
 
